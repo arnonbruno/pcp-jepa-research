@@ -1,0 +1,60 @@
+{
+  "O1": {
+    "baseline": {
+      "42": {
+        "total_failures": 60,
+        "catastrophic_failures": 52,
+        "event_linked_failures": 10,
+        "event_linked_fraction": 0.16666666666666666
+      }
+    },
+    "O1": {
+      "42": {
+        "total_failures": 60,
+        "catastrophic_failures": 52,
+        "event_linked_failures": 10,
+        "event_linked_fraction": 0.16666666666666666
+      }
+    },
+    "seeds": [
+      42
+    ]
+  },
+  "O3": {
+    "baseline": {
+      "42": {
+        "total_failures": 60,
+        "catastrophic_failures": 52,
+        "event_linked_failures": 11,
+        "event_linked_fraction": 0.18333333333333332
+      }
+    },
+    "O3": {
+      "42": {
+        "total_failures": 60,
+        "catastrophic_failures": 53,
+        "event_linked_failures": 11,
+        "event_linked_fraction": 0.18333333333333332
+      }
+    },
+    "seeds": [
+      42
+    ]
+  },
+  "O1_gate": {
+    "passed": "False",
+    "c1_reduction": 0.0,
+    "c1_passed": "False",
+    "c2_passed": true,
+    "c3_passed": "False",
+    "c4_passed": true
+  },
+  "O3_gate": {
+    "passed": "False",
+    "c1_reduction": -0.019230769230769232,
+    "c1_passed": "False",
+    "c2_passed": true,
+    "c3_passed": "False",
+    "c4_passed": true
+  }
+}

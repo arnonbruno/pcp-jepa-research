@@ -138,7 +138,7 @@ class EventDetector:
         y = jnp.zeros(num_steps)
         
         for event in event_log.events:
-            y = y.at[event.timestep].set(1.0)
+            y = y.at[event.time].set(1.0)
         
         return y
     
