@@ -1,0 +1,14 @@
+{
+  "baseline": {
+    "success_rate": 0.2,
+    "catastrophic_rate": 0.0
+  },
+  "O1": {
+    "success_rate": 0.1,
+    "catastrophic_rate": 0.0
+  },
+  "O3": {
+    "success_rate": 0.0,
+    "catastrophic_rate": 0.0
+  }
+}
