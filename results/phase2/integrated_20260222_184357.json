@@ -1,0 +1,18 @@
+{
+  "random": {
+    "success_rate": 0.1,
+    "catastrophic_rate": 0.0
+  },
+  "baseline": {
+    "success_rate": 0.05,
+    "catastrophic_rate": 0.0
+  },
+  "O1": {
+    "success_rate": 0.1,
+    "catastrophic_rate": 0.0
+  },
+  "O3": {
+    "success_rate": 0.15,
+    "catastrophic_rate": 0.0
+  }
+}
