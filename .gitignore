@@ -37,8 +37,8 @@ htmlcov/
 
 # Results (keep directory structure)
 results/**/*.png
-results/**/*.json
 results/**/*.pdf
+!results/**/*.json
 !results/.gitkeep
 
 # Models
