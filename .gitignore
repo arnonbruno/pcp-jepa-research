@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Results (keep directory structure)
+results/**/*.png
+results/**/*.json
+results/**/*.pdf
+!results/.gitkeep
+
+# Models
+checkpoints/
+logs/
+
+# Data
+data/
+*.h5
+*.hdf5
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.log
+.env
