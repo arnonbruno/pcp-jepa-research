@@ -422,3 +422,53 @@ CONTINUOUS_RANGE = (0.5, 3.5)
 4. **Dropout doesn't differentiate methods**: All are robust due to last-valid-observation fallback
 
 5. **FD is the robust baseline**: 71% with zero training data, robust to OOD and dropout
+
+---
+
+## Action-Shift Analysis
+
+### Multi-Seed Training Results
+
+Running 10 different training seeds reveals:
+
+| Seed | Success Rate |
+|------|--------------|
+| 0, 1, 3, 5, 6, 7 | 57.1% |
+| 2, 4, 8, 9 | **71.4%** |
+
+**Mean: 62.9% ± 7.0%**
+
+**Key finding**: The observer CAN match FD (71.4%) but training is unstable. The difference between "working" and "failing" seeds is random initialization and SGD trajectory.
+
+### Why Some Seeds Fail
+
+Analysis of failing seeds shows:
+1. Observer predicts v≈0.1 at startup (should be 0)
+2. This small error compounds over trajectory
+3. At boundary inits (x0=1.5), the error leads to failure
+
+### Aggregated Observer
+
+Adversarial data aggregation (DAgger for estimators) performed **worse** (57.1%) than supervised training. The aggregation process degraded performance by adding noisy rollout data.
+
+### Conclusion
+
+1. **Supervised observer can match FD** with right training seed (71.4%)
+2. **Training is unstable** - 60% of seeds fail (57.1%)
+3. **Aggregation doesn't help** - adds distribution shift
+
+The 14% "action-shift gap" is actually **training instability**, not a fundamental limitation.
+
+---
+
+## Final Scientific Claims
+
+1. **Failure region is fundamental**: x0 ∈ [0.50, 1.45] unsolvable under 30-step horizon
+
+2. **Supervised observer can match FD**: Achieves 71.4% with right seed
+
+3. **Training instability is the real issue**: 60% of random seeds fail
+
+4. **FD is robust**: 71.4% with zero training, no variance
+
+5. **Aggregation doesn't help**: Adds noise, degrades performance
