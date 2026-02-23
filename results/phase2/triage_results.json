@@ -1,0 +1,7 @@
+{
+  "action_influence_random": "True",
+  "ground_truth_ctrl": "True",
+  "multistep_error": "True",
+  "trained_model": "False",
+  "train_and_test": "False"
+}

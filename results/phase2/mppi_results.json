@@ -1,0 +1,10 @@
+{
+  "random": [],
+  "mppi": [],
+  "random_success_rate": 0.0,
+  "random_catastrophic_rate": 0.8,
+  "random_avg_miss": 0.7962328706979752,
+  "mppi_success_rate": 0.2,
+  "mppi_catastrophic_rate": 0.6,
+  "mppi_avg_miss": 0.6043409504669254
+}

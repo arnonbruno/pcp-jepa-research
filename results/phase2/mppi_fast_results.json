@@ -1,0 +1,15 @@
+{
+  "config": {
+    "horizon": 10,
+    "n_samples": 64,
+    "n_episodes": 20
+  },
+  "results": {
+    "random_success_rate": 0.1,
+    "random_catastrophic_rate": 0.75,
+    "random_avg_miss": 0.7373050042986871,
+    "mppi_success_rate": 0.2,
+    "mppi_catastrophic_rate": 0.75,
+    "mppi_avg_miss": 0.8497413087072785
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "random": {
+    "success_rate": 0.27,
+    "success_ci": 0.0870160536912586,
+    "avg_miss": 0.7272486954927444,
+    "elapsed": 5.385723829269409
+  },
+  "mppi_oracle": {
+    "success_rate": 0.15,
+    "success_ci": 0.06998599859971993,
+    "avg_miss": 1.7128875102102756,
+    "elapsed": 4.7008421421051025
+  }
+}

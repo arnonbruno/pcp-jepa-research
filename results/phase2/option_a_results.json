@@ -1,0 +1,28 @@
+{
+  "n_episodes": 500,
+  "results": {
+    "random": {
+      "success_rate": 0.252,
+      "success_ci": 0.03805591238165234,
+      "catastrophic_rate": 0.62,
+      "avg_miss": 0.7654160273456574
+    },
+    "mppi_unconstrained": {
+      "success_rate": 0.19,
+      "success_ci": 0.034386690448486024,
+      "catastrophic_rate": 0.7,
+      "avg_miss": 0.8497703652807367
+    },
+    "mppi_constrained": {
+      "success_rate": 0.162,
+      "success_ci": 0.0322961375275744,
+      "catastrophic_rate": 0.708,
+      "avg_miss": 0.8845095150675829
+    }
+  },
+  "key_finding": {
+    "unconstrained_improvement": -0.062,
+    "constrained_improvement": -0.09,
+    "constraint_helps": false
+  }
+}
