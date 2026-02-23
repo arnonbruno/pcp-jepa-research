@@ -529,3 +529,42 @@ Hybrid dynamics amplifies tiny estimator errors at boundary conditions into disc
 2. **Physics-informed architecture helps** - F3 doubles success rate
 3. **Hybrid dynamics is knife-edge** - tiny errors at boundary cause failure
 4. **FD is still the robust baseline** - zero variance, zero training
+
+---
+
+## Final Results: Physics-Informed Training
+
+### Method Comparison (10 seeds)
+
+| Method | Mean | Std | Seeds @71.4% |
+|--------|------|-----|--------------|
+| Baseline | 61.4% | ±6.5% | 3/10 |
+| **F3 (Δx/dt residual)** | **67.1%** | ±6.5% | **7/10** |
+| F3+F1 (zero-delta) | 62.9% | ±7.0% | 2/10 |
+| FD (oracle) | 71.4% | 0% | - |
+
+### Key Findings
+
+1. **F3 is optimal**: Physics-normalized input doubles success rate (3/10 → 7/10)
+
+2. **F1 degrades F3**: Zero-delta constraint interferes with residual learning
+
+3. **Training variance persists**: Even F3 has ±6.5% std
+
+4. **FD is robust**: Zero variance, zero training, optimal performance
+
+### Scientific Contribution
+
+> *"Physics-normalized architecture (Δx/dt residual learning) improves training stability in hybrid dynamics control from 30% to 70% success rate. However, variance persists (±6.5%), demonstrating that physics-informed inductive biases help but don't eliminate training instability. Finite-difference remains the robust zero-variance baseline."*
+
+### Architecture
+
+```python
+class PhysicsInformedObserver(nn.Module):
+    def forward(self, x, x_prev):
+        delta_v = (x - x_prev) / dt  # Physics prior
+        correction = self.net(concat(x, delta_v))  # Learned residual
+        return delta_v + correction
+```
+
+This structure ensures the network always outputs Δx/dt at initialization, providing a strong physics-consistent starting point.
