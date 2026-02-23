@@ -412,7 +412,7 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
 
 def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
                    oracle_path='hopper_sac.zip', oracle_steps=1_000_000,
-                   results_dir='../../results', seed=42):
+                   results_dir='../../results', seed=42, retrain_oracle=False):
     """Run full PANO experiment with all baselines and statistical tests."""
 
     np.random.seed(seed)
@@ -427,10 +427,15 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print("=" * 70)
 
     # --- Train or load oracle ---
-    if not os.path.exists(oracle_path):
-        sac_model = train_oracle(oracle_path, total_timesteps=oracle_steps, seed=seed)
-    else:
+    if os.path.exists(oracle_path) and not retrain_oracle:
+        print(f"  Loading existing oracle from {oracle_path}")
+        print(f"  WARNING: If this oracle was trained with fewer steps, delete it and re-run.")
         sac_model = get_oracle(oracle_path)
+    else:
+        if os.path.exists(oracle_path):
+            os.remove(oracle_path)
+            print(f"  Removed stale oracle {oracle_path}, retraining...")
+        sac_model = train_oracle(oracle_path, total_timesteps=oracle_steps, seed=seed)
 
     # --- Train PANO ---
     print("\n[1/5] Training PANO velocity predictor...")
@@ -534,6 +539,8 @@ if __name__ == '__main__':
     parser.add_argument('--oracle-steps', type=int, default=1_000_000)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--results-dir', type=str, default='../../results/phase6')
+    parser.add_argument('--retrain-oracle', action='store_true',
+                        help='Force retrain oracle even if hopper_sac.zip exists')
     args = parser.parse_args()
 
     run_experiment(
@@ -542,4 +549,5 @@ if __name__ == '__main__':
         oracle_steps=args.oracle_steps,
         results_dir=args.results_dir,
         seed=args.seed,
+        retrain_oracle=args.retrain_oracle,
     )

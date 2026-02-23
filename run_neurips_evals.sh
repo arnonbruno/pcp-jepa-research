@@ -75,11 +75,13 @@ echo "==========================================================================
 cd experiments/phase6
 
 echo "Running PANO evaluation ($N_EPISODES episodes per method)..."
+echo "  (Oracle will be retrained with $ORACLE_STEPS steps)"
 python hopper_pano.py \
     --n-episodes $N_EPISODES \
     --oracle-steps $ORACLE_STEPS \
     --seed $SEED \
     --results-dir ../../results/phase6 \
+    --retrain-oracle \
     2>&1 | tee ../../results/phase6/hopper_pano.log
 
 echo "✓ PANO results saved to results/phase6/hopper_pano_results.json"

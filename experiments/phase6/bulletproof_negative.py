@@ -227,7 +227,7 @@ def experiment_1_data_scaling(sac_model, env, dt, seed=42):
 # EXPERIMENT 2: CONTINUOUS CONTROL ABLATION (Multiple Environments)
 # =============================================================================
 
-def experiment_2_continuous_ablation(seed=42, oracle_steps=500_000, n_eval_episodes=50):
+def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_episodes=50):
     """
     Test Standard Latent JEPA on multiple MuJoCo environments:
       - Hopper-v4 (hybrid/contact)
