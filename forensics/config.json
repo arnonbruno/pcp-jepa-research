@@ -1,0 +1,22 @@
+{
+  "commit_hash": "de87d00",
+  "timestamp": "2026-02-22T21:21:24.933751",
+  "jax_version": "0.9.0.1",
+  "dt": 0.05,
+  "restitution": 0.8,
+  "x_min": 0.0,
+  "x_max": 4.0,
+  "x_target": 2.0,
+  "max_steps": 30,
+  "tau_success": 0.3,
+  "tau_catastrophic": 0.5,
+  "v_max": 2.0,
+  "horizon": 50,
+  "n_samples": 64,
+  "action_scale": 2.0,
+  "train_seed": 42,
+  "n_train": 5000,
+  "n_epochs": 100,
+  "eval_seed": 42,
+  "n_episodes": 100
+}
