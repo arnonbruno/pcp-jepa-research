@@ -661,3 +661,55 @@ def get_velocity(x, observation_available):
 
 > *"F3-JEPA unifies two solutions: (1) Physics-informed input (Δx/dt) addresses training variance, (2) Multi-step latent prediction addresses observation dropout. The key insight is balancing losses: velocity consistency must dominate over JEPA prediction to maintain knife-edge precision."*
 
+
+---
+
+## Final Validation Results
+
+### Test 1: F3-JEPA 10-Seed Stability
+
+| Seed | Success | Seed | Success |
+|------|---------|------|---------|
+| 0 | 100% | 5 | 80% |
+| 1 | 80% | 6 | 80% |
+| 2 | 100% | 7 | 80% |
+| 3 | 80% | 8 | 100% |
+| 4 | 80% | 9 | 80% |
+
+**Mean: 86.0% ± 9.2%**
+**Seeds @ 100%: 3/10**
+
+Comparison with F3 baseline (67.1% ± 6.5%, 7/10 @ 71.4%):
+- F3-JEPA has higher mean but different distribution
+- F3: bimodal at 57% or 71%
+- F3-JEPA: bimodal at 80% or 100%
+
+### Test 2: Sensor Delay Vulnerability
+
+**Per-Init with 1-Step Delay:**
+
+| x0 | FD | F3-JEPA |
+|----|-----|---------|
+| 1.5 (boundary) | **0%** | **0%** |
+| 2.0+ | 100% | 100% |
+
+**Key finding**: Both FD and F3-JEPA collapse at boundary with sensor delay.
+
+### Why Dropout Works But Delay Doesn't
+
+**Post-Impact Dropout** (F3-JEPA wins):
+- We have current x_t
+- Velocity estimate frozen, but position is current
+- Predictor rolls latent forward using action
+- Result: 100% success vs FD's 80%
+
+**Sensor Delay** (Both fail at boundary):
+- We have x_{t-1} instead of x_t
+- Always 1 step behind in position
+- Boundary case (x0=1.5) is knife-edge: being 1 step behind is fatal
+- Result: 0% at boundary for both methods
+
+### Scientific Conclusion
+
+F3-JEPA solves **velocity estimation dropout** but not **observation delay**. The boundary condition (x0=1.5) requires current position knowledge - being even 1 step behind causes complete failure.
+
