@@ -1,0 +1,32 @@
+{
+  "random": {
+    "success_rate": 0.32,
+    "catastrophic_rate": 0.0,
+    "miss_mean": 0.8039441875065956,
+    "miss_std": 0.5545798358719104
+  },
+  "p_controller": {
+    "success_rate": 1.0,
+    "catastrophic_rate": 0.0,
+    "miss_mean": 0.6285871465906723,
+    "miss_std": 0.3307213137341214
+  },
+  "bang_bang": {
+    "success_rate": 1.0,
+    "catastrophic_rate": 0.0,
+    "miss_mean": 0.5932499999999998,
+    "miss_std": 0.33435204126788276
+  },
+  "mppi_standard": {
+    "success_rate": 1.0,
+    "catastrophic_rate": 0.0,
+    "miss_mean": 0.050023807920302935,
+    "miss_std": 0.049913975904428205
+  },
+  "mppi_segmented": {
+    "success_rate": 1.0,
+    "catastrophic_rate": 0.0,
+    "miss_mean": 0.04573407038277984,
+    "miss_std": 0.04632605036769109
+  }
+}
