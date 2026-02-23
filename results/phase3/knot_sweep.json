@@ -1,0 +1,27 @@
+{
+  "flat": {
+    "success_rate": 0.565,
+    "miss_mean": 0.836956661871366,
+    "miss_median": 0.2560284548428349
+  },
+  "k3": {
+    "success_rate": 0.565,
+    "miss_mean": 0.8305591123240326,
+    "miss_median": 0.25221387056733646
+  },
+  "k5": {
+    "success_rate": 0.565,
+    "miss_mean": 0.8337060296405872,
+    "miss_median": 0.2543343115018333
+  },
+  "k10": {
+    "success_rate": 0.565,
+    "miss_mean": 0.8346254417553268,
+    "miss_median": 0.2548178073246392
+  },
+  "k15": {
+    "success_rate": 0.565,
+    "miss_mean": 0.8315730060318167,
+    "miss_median": 0.2553800690727748
+  }
+}
