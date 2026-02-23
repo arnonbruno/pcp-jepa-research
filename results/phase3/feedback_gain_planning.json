@@ -1,0 +1,8 @@
+{
+  "p_controller": 0.565,
+  "pd_controller": 0.565,
+  "mppi_feedback": 0.71,
+  "grid_search": 0.7,
+  "best_k1": 1.5,
+  "best_k2": -2.0
+}

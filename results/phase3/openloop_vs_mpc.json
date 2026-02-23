@@ -1,0 +1,17 @@
+{
+  "open-loop": {
+    "success_rate": 0.565,
+    "miss_mean": 0.8390454114859297,
+    "miss_median": 0.25560354659239004
+  },
+  "MPC": {
+    "success_rate": 0.565,
+    "miss_mean": 0.836956661871366,
+    "miss_median": 0.2560284548428349
+  },
+  "P": {
+    "success_rate": 0.565,
+    "miss_mean": 0.8352019891467577,
+    "miss_median": 0.23177214900312482
+  }
+}
