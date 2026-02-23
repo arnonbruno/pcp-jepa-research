@@ -472,3 +472,60 @@ The 14% "action-shift gap" is actually **training instability**, not a fundament
 4. **FD is robust**: 71.4% with zero training, no variance
 
 5. **Aggregation doesn't help**: Adds noise, degrades performance
+
+---
+
+## Physics-Informed Training (Final Solution)
+
+### Problem: Training Instability
+
+Standard supervised observer training produces bimodal outcomes:
+- 30% of seeds: 71.4% (matches FD)
+- 70% of seeds: 57.1% (fails at boundary)
+
+### Solution: F3 - Physics-Normalized Residual Learning
+
+Instead of learning v = f(x, x_prev), learn:
+
+```
+v = Δx/dt + correction(x, Δx/dt)
+```
+
+This uses finite-difference as the base, with a learned residual correction.
+
+### Results (10 seeds)
+
+| Method | Mean | Std | Seeds @71.4% |
+|--------|------|-----|--------------|
+| Baseline | 61.4% | ±6.5% | 3/10 |
+| **F3** | **67.1%** | ±6.5% | **7/10** |
+| FD | 71.4% | 0% | - |
+
+**F3 increases success rate from 30% to 70%!**
+
+### Mechanism Analysis
+
+**M1: Per-Init Breakdown**
+- All variance is at x0=1.5 (boundary case)
+- x0≥2.0: 100% success for all seeds
+
+**M2: Startup Bias**
+- GOOD seeds: mean bias ≈ 0, low variance
+- BAD seeds: inconsistent bias patterns
+
+**M3: Sensitivity Curve**
+- At x0=1.5: bias > ±0.1 causes complete failure
+- At x0≥2.0: bias doesn't matter (robust)
+
+### Key Insight
+
+Hybrid dynamics amplifies tiny estimator errors at boundary conditions into discrete success/failure outcomes. Physics-normalized inputs (Δx/dt) provide strong inductive bias that helps more seeds converge to the correct solution.
+
+---
+
+## Scientific Contribution
+
+1. **Training instability is the real issue** - not fundamental learning limitation
+2. **Physics-informed architecture helps** - F3 doubles success rate
+3. **Hybrid dynamics is knife-edge** - tiny errors at boundary cause failure
+4. **FD is still the robust baseline** - zero variance, zero training
