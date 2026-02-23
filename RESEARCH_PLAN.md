@@ -1,6 +1,12 @@
 # PCP-JEPA Research Program
 
-## North Star Discovery
+> **⚠️ HISTORICAL DOCUMENT:** This research plan was the original ambitious roadmap.
+> The actual empirical results diverged significantly — see README.md for what was
+> actually achieved. The O1/O2/O3 objectives and multi-scale dynamics described below
+> were never implemented in the final paper. The final contribution is an empirical
+> negative result (JEPA rollout fails) plus PANO as a constructive baseline.
+
+## North Star Discovery (Original)
 
 **Target**: Long-horizon planning fails primarily due to rare but decisive "physics events" (contacts, stick-slip transitions, saturations, topology changes) and miscalibration of uncertainty around them.
 

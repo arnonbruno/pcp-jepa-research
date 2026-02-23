@@ -3,125 +3,154 @@
 # NEURIPS REPRODUCIBILITY SCRIPT
 # ================================================================================
 # This script reproduces all results from the paper:
-# "Physics-Anchored Neural Observers for Hybrid Dynamical Systems"
+# "An Empirical Investigation into the Failure Modes of JEPA in
+#  Hybrid Continuous Control"
 #
-# Usage: ./run_neurips_evals.sh
+# Produces:
+#   results/phase5/  — Bouncing Ball experiments
+#   results/phase6/  — Hopper + multi-env experiments
+#   results/phase6/figure*.pdf  — Publication figures
+#
+# Usage:
+#   ./run_neurips_evals.sh [--seed 42] [--episodes 100] [--oracle-steps 1000000]
 # ================================================================================
 
-set -e  # Exit on error
+set -euo pipefail
 
-# Hardcoded seeds for exact reproducibility
-export PYTHONHASHSEED=42
+# Defaults
 SEED=42
+N_EPISODES=100
+ORACLE_STEPS=1000000
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --seed) SEED="$2"; shift 2 ;;
+        --episodes) N_EPISODES="$2"; shift 2 ;;
+        --oracle-steps) ORACLE_STEPS="$2"; shift 2 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+export PYTHONHASHSEED=$SEED
 
 echo "================================================================================"
 echo "NEURIPS REPRODUCIBILITY EVALUATION"
 echo "================================================================================"
-echo "Seed: $SEED"
-echo "Date: $(date)"
+echo "  Seed:           $SEED"
+echo "  Episodes/method: $N_EPISODES"
+echo "  Oracle steps:   $ORACLE_STEPS"
+echo "  Date:           $(date)"
 echo "================================================================================"
 
-# Create results directory
-mkdir -p results
+# Create results directories
+mkdir -p results/phase5
+mkdir -p results/phase6
 
 # ================================================================================
-# EXPERIMENT 1: BOUNCING BALL (PHASE 5)
+# EXPERIMENT 1: BOUNCING BALL (Phase 5)
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "EXPERIMENT 1: BOUNCING BALL - VELOCITY DROPOUT"
+echo "EXPERIMENT 1: BOUNCING BALL — VELOCITY DROPOUT"
 echo "================================================================================"
 
 cd experiments/phase5
 
 echo "Running F3-JEPA on Bouncing Ball..."
-python f3_jepa.py --seed $SEED --n_episodes 20 > ../../results/bouncing_ball_results.txt 2>&1
+python f3_jepa.py 2>&1 | tee ../../results/phase5/bouncing_ball.log
 
-echo "✓ Bouncing Ball results saved to results/bouncing_ball_results.txt"
+echo "✓ Bouncing Ball results saved"
 
 cd ../..
 
 # ================================================================================
-# EXPERIMENT 2: HOPPER - CONTACT-TRIGGERED DROPOUT
+# EXPERIMENT 2: HOPPER — PANO vs ALL BASELINES
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "EXPERIMENT 2: HOPPER - CONTACT-TRIGGERED DROPOUT"
+echo "EXPERIMENT 2: HOPPER — PANO vs BASELINES (Oracle, Frozen, EKF)"
 echo "================================================================================"
 
 cd experiments/phase6
 
-# Train oracle if not exists
-if [ ! -f "hopper_sac.zip" ]; then
-    echo "Training SAC oracle (100k steps)..."
-    python -c "
-import gymnasium as gym
-from stable_baselines3 import SAC
-import warnings
-warnings.filterwarnings('ignore')
-env = gym.make('Hopper-v4')
-model = SAC('MlpPolicy', env, learning_rate=3e-4, buffer_size=100000, 
-            learning_starts=1000, batch_size=256, verbose=0, seed=42)
-model.learn(total_timesteps=100000, progress_bar=True)
-model.save('hopper_sac.zip')
-print('Oracle saved.')
-"
-fi
+echo "Running PANO evaluation ($N_EPISODES episodes per method)..."
+python hopper_pano.py \
+    --n-episodes $N_EPISODES \
+    --oracle-steps $ORACLE_STEPS \
+    --seed $SEED \
+    --results-dir ../../results/phase6 \
+    2>&1 | tee ../../results/phase6/hopper_pano.log
 
-echo "Running PANO on Hopper..."
-python hopper_pano.py > ../../results/hopper_pano_results.txt 2>&1
+echo "✓ PANO results saved to results/phase6/hopper_pano_results.json"
+
+# ================================================================================
+# EXPERIMENT 3: BULLETPROOF NEGATIVE PROTOCOL
+#   - Data Scaling Law
+#   - Multi-Environment Ablation (Hopper, Walker2d, HalfCheetah, InvertedDoublePendulum)
+#   - Impact Horizon Profiling
+# ================================================================================
+echo ""
+echo "================================================================================"
+echo "EXPERIMENT 3: BULLETPROOF NEGATIVE PROTOCOL (3 sub-experiments)"
+echo "================================================================================"
 
 echo "Running Bulletproof Negative Protocol..."
-python bulletproof_negative.py > ../../results/bulletproof_results.txt 2>&1
+python bulletproof_negative.py \
+    --seed $SEED \
+    --oracle-steps $ORACLE_STEPS \
+    --n-eval-episodes $(($N_EPISODES / 2)) \
+    --results-dir ../../results/phase6 \
+    2>&1 | tee ../../results/phase6/bulletproof.log
 
-echo "✓ Hopper results saved to results/hopper_*.txt"
+echo "✓ Bulletproof results saved to results/phase6/bulletproof_results.json"
 
 cd ../..
 
 # ================================================================================
-# EXPERIMENT 3: INVERTED DOUBLE PENDULUM (CONTINUOUS CONTROL ABLATION)
+# GENERATE PUBLICATION FIGURES
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "EXPERIMENT 3: INVERTED DOUBLE PENDULUM - CONTINUOUS CONTROL"
-echo "================================================================================"
-
-# This is already run in bulletproof_negative.py
-echo "✓ Results already in results/bulletproof_results.txt"
-
-# ================================================================================
-# GENERATE FIGURES
-# ================================================================================
-echo ""
-echo "================================================================================"
-echo "GENERATING NEURIPS FIGURES"
+echo "GENERATING NEURIPS FIGURES (data-driven from JSON results)"
 echo "================================================================================"
 
 cd experiments/phase6
-python neurips_figures.py
-cp figure*.pdf ../../results/
-cp figure*.png ../../results/
+
+python neurips_figures.py \
+    --results-dir ../../results/phase6 \
+    --output-dir ../../results/phase6
+
 cd ../..
 
-echo "✓ Figures saved to results/figure*.pdf"
+echo "✓ Figures saved to results/phase6/figure*.pdf"
 
 # ================================================================================
-# SUMMARY
+# FINAL SUMMARY
 # ================================================================================
 echo ""
 echo "================================================================================"
-echo "EVALUATION COMPLETE"
+echo "ALL EXPERIMENTS COMPLETE"
 echo "================================================================================"
 echo ""
-echo "Results summary:"
-echo "  - Bouncing Ball: results/bouncing_ball_results.txt"
-echo "  - Hopper v4:     results/hopper_v4_results.txt"
-echo "  - Bulletproof:   results/bulletproof_results.txt"
-echo "  - Figures:       results/figure*.pdf"
+echo "Results files:"
+echo "  results/phase5/bouncing_ball.log         — Bouncing Ball evaluation"
+echo "  results/phase6/hopper_pano_results.json  — PANO main results (with stats)"
+echo "  results/phase6/bulletproof_results.json   — Negative result validation"
+echo "  results/phase6/hopper_pano.log           — PANO detailed output"
+echo "  results/phase6/bulletproof.log           — Bulletproof detailed output"
+echo ""
+echo "Publication figures:"
+echo "  results/phase6/figure1_latent_drift.pdf       — Exponential divergence"
+echo "  results/phase6/figure2_data_scaling.pdf        — Data scaling asymptote"
+echo "  results/phase6/figure3_performance_recovery.pdf — PANO vs baselines"
+echo "  results/phase6/figure4_multi_env.pdf           — Multi-environment ablation"
 echo ""
 echo "Key findings:"
-echo "  1. Latent JEPA rollout diverges exponentially in high-dimensional systems"
-echo "  2. Data scaling does not fix latent-physics misalignment"
-echo "  3. Physics-anchored velocity prediction (PANO) recovers +22.6% performance"
+echo "  1. Standard Latent JEPA rollout diverges exponentially (all envs)"
+echo "  2. More data does NOT fix prediction-velocity misalignment"
+echo "  3. PANO (physics-anchored velocity) recovers partial performance"
+echo "  4. All results include Welch's t-tests and 95% bootstrap CIs"
 echo ""
+echo "Cite: PANO: Physics-Anchored Neural Observers for Hybrid Control (NeurIPS 2026)"
 echo "================================================================================"

@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
-F3-JEPA v5 - True Latent Rollout with Residual Dynamics
+Standard Latent JEPA — Latent Rollout with Residual Dynamics
 
-Key fixes from v2 explosion:
-1. Residual predictor: z_next = z + predictor(z, a) instead of absolute
-2. Aggressive loss imbalance: λ_vel=10.0 >> λ_pred=0.1
-3. EMA target encoder with stop-gradient
-4. True iterative latent rollout during dropout
+Architecture: z_next = z + predictor(z, a)  (residual latent dynamics)
+Includes: EMA target encoder, stop-gradient, aggressive velocity loss.
 
-This is the real JEPA - latent evolves dynamically during blackout.
+This is the architecture whose latent rollout DIVERGES exponentially
+in high-dimensional continuous control under sensor dropout.
+
+The main result: despite residual dynamics, EMA targets, and multi-step
+training, the latent representation accumulates prediction error that
+makes it WORSE than just using frozen observations.
+
+See bulletproof_negative.py for the rigorous multi-experiment validation.
 """
 
 import torch
@@ -94,17 +98,19 @@ class CriticalDropoutEnv:
         self.env.close()
 
 # =============================================================================
-# F3-JEPA v5 - RESIDUAL LATENT DYNAMICS
+# Standard Latent JEPA - RESIDUAL LATENT DYNAMICS
 # =============================================================================
 
-class F3JEPAHopperV5(nn.Module):
+class StandardLatentJEPAHopper(nn.Module):
     """
-    F3-JEPA v5: True latent rollout with residual dynamics.
+    Standard Latent JEPA with residual dynamics.
     
-    Key innovations:
-    1. Residual predictor: z_next = z + Δz (prevents explosion)
+    Architecture:
+    1. Residual predictor: z_next = z + Δz
     2. EMA target encoder with stop-gradient
     3. Aggressive velocity loss (λ_vel >> λ_pred)
+    
+    Despite these stabilization techniques, latent rollout still diverges.
     """
     def __init__(self, obs_dim=11, action_dim=3, latent_dim=64):
         super().__init__()
@@ -213,9 +219,9 @@ def generate_data(sac_model, n_episodes=200):
     print(f"Generated {len(data['obs'])} transitions")
     return data
 
-def train_f3jepa_v5(model, data, n_epochs=100, lambda_vel=10.0, lambda_pred=0.1, dt=0.002):
+def train_standard_jepa(model, data, n_epochs=100, lambda_vel=10.0, lambda_pred=0.1, dt=0.002):
     """
-    Train F3-JEPA v5 with aggressive velocity loss.
+    Train Standard Latent JEPA with aggressive velocity loss.
     
     λ_vel=10.0 >> λ_pred=0.1 (velocity dominates prediction)
     """
@@ -272,9 +278,9 @@ def train_f3jepa_v5(model, data, n_epochs=100, lambda_vel=10.0, lambda_pred=0.1,
 # EVALUATION WITH TRUE LATENT ROLLOUT
 # =============================================================================
 
-def test_f3jepa_v5(sac_model, jepa_model, n_episodes=30, dropout_duration=5, velocity_threshold=0.1, dt=0.002):
+def test_standard_jepa(sac_model, jepa_model, n_episodes=30, dropout_duration=5, velocity_threshold=0.1, dt=0.002):
     """
-    Test F3-JEPA v5 with true iterative latent rollout during dropout.
+    Test Standard Latent JEPA with true iterative latent rollout during dropout.
     
     During dropout:
     1. Evolve latent: z = z + predictor(z, action)
@@ -418,7 +424,7 @@ def test_oracle_velocity(sac_model, n_episodes=30, dropout_duration=5, velocity_
 # MULTI-STEP PREDICTION TRAINING
 # =============================================================================
 
-def train_f3jepa_v5_multistep(model, data, n_epochs=100, n_rollout=3, lambda_vel=10.0, lambda_pred=0.1, dt=0.002):
+def train_standard_jepa_multistep(model, data, n_epochs=100, n_rollout=3, lambda_vel=10.0, lambda_pred=0.1, dt=0.002):
     """
     Train with multi-step latent rollout to improve long-range prediction.
     """
@@ -489,7 +495,7 @@ def train_f3jepa_v5_multistep(model, data, n_epochs=100, n_rollout=3, lambda_vel
 
 if __name__ == '__main__':
     print("="*70)
-    print("F3-JEPA v5 - TRUE LATENT ROLLOUT WITH RESIDUAL DYNAMICS")
+    print("Standard Latent JEPA - TRUE LATENT ROLLOUT WITH RESIDUAL DYNAMICS")
     print("="*70)
     print("Key innovations:")
     print("  1. Residual predictor: z_next = z + Δz")
@@ -529,28 +535,28 @@ if __name__ == '__main__':
     oracle_v_results = test_oracle_velocity(sac_model, n_episodes=30)
     print(f"Reward: {np.mean(oracle_v_results['reward']):.1f} ± {np.std(oracle_v_results['reward']):.1f}")
     
-    # Train F3-JEPA v5
+    # Train Standard Latent JEPA
     print("\n" + "="*70)
-    print("TRAINING F3-JEPA v5")
+    print("TRAINING Standard Latent JEPA")
     print("="*70)
     data = generate_data(sac_model, n_episodes=300)
-    jepa_model = F3JEPAHopperV5(latent_dim=64).to(device)
+    jepa_model = StandardLatentJEPAHopper(latent_dim=64).to(device)
     
     # Phase 1: Single-step training
     print("\nPhase 1: Single-step prediction...")
-    jepa_model = train_f3jepa_v5(jepa_model, data, n_epochs=50, lambda_vel=10.0, lambda_pred=0.1)
+    jepa_model = train_standard_jepa(jepa_model, data, n_epochs=50, lambda_vel=10.0, lambda_pred=0.1)
     
     # Phase 2: Multi-step training
     print("\nPhase 2: Multi-step rollout...")
-    jepa_model = train_f3jepa_v5_multistep(jepa_model, data, n_epochs=50, n_rollout=3, lambda_vel=10.0, lambda_pred=0.1)
+    jepa_model = train_standard_jepa_multistep(jepa_model, data, n_epochs=50, n_rollout=3, lambda_vel=10.0, lambda_pred=0.1)
     
-    # Test F3-JEPA v5
+    # Test Standard Latent JEPA
     print("\n" + "="*70)
-    print("F3-JEPA v5 EVALUATION")
+    print("Standard Latent JEPA EVALUATION")
     print("="*70)
-    jepa_results = test_f3jepa_v5(sac_model, jepa_model, n_episodes=30)
+    jepa_results = test_standard_jepa(sac_model, jepa_model, n_episodes=30)
     
-    print(f"\nF3-JEPA v5:")
+    print(f"\nStandard Latent JEPA:")
     print(f"  Reward: {np.mean(jepa_results['reward']):.1f} ± {np.std(jepa_results['reward']):.1f}")
     print(f"  Velocity error: {np.mean(jepa_results['velocity_error']):.2f}")
     print(f"  Length: {np.mean(jepa_results['length']):.0f} steps")
@@ -562,11 +568,11 @@ if __name__ == '__main__':
     print(f"Oracle (no dropout):     {oracle_reward:.1f}")
     print(f"Oracle velocity:         {np.mean(oracle_v_results['reward']):.1f}")
     print(f"FD Baseline:             {np.mean(fd_results['reward']):.1f}")
-    print(f"F3-JEPA v5:              {np.mean(jepa_results['reward']):.1f}")
+    print(f"Standard Latent JEPA:              {np.mean(jepa_results['reward']):.1f}")
     
     print(f"\nVelocity Error:")
     print(f"  FD:       {np.mean(fd_results['velocity_error']):.2f}")
-    print(f"  F3-JEPA v5: {np.mean(jepa_results['velocity_error']):.2f}")
+    print(f"  Standard Latent JEPA: {np.mean(jepa_results['velocity_error']):.2f}")
     
     # Check for explosion
     if np.mean(jepa_results['velocity_error']) > 1000:

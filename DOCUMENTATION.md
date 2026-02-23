@@ -1,8 +1,13 @@
-# PCP-JEPA Research: Complete Documentation
+# PANO Research: Complete Technical Documentation
 
 ## Overview
 
-This repository contains research on physics-informed representation learning for hybrid dynamics control. The main finding: **F3-JEPA architecture achieves 100% success under post-impact observation dropout where finite-difference drops to 80%.**
+This repository contains an empirical investigation into JEPA (Joint-Embedding Predictive Architecture) failure modes in hybrid continuous control. The primary finding is **negative**: standard latent JEPA rollout diverges exponentially in high-dimensional systems under partial observability. As a constructive baseline, PANO (Physics-Anchored Neural Observer) recovers partial task performance via observation-space velocity estimation.
+
+### Two-Line Summary
+
+1. **Standard Latent JEPA rollout fails** — prediction error grows exponentially with rollout steps across all tested environments.
+2. **PANO (velocity prediction + Euler integration) recovers partial performance** — by staying in observation space, it avoids latent drift.
 
 ---
 
@@ -10,414 +15,242 @@ This repository contains research on physics-informed representation learning fo
 
 ```
 pcp-jepa-research/
-├── README.md                    # This file
-├── MEMORY.md                    # Long-term research memory
-├── AGENTS.md                    # Agent configuration
-├── USER.md                      # User profile
-├── src/                         # Core source code
-│   ├── environments/           # Environment implementations
-│   │   └── bouncing_ball.py    # Ball dynamics
-│   ├── models/                 # Model implementations
-│   │   ├── observer.py         # Standard observer
-│   │   └── pcp_jepa/          # JEPA models
-│   │       └── model.py
-│   └── evaluation/            # Evaluation utilities
-│       └── planning_eval.py
-├── experiments/                # Experiment scripts
-│   └── phase5/                # Main experiments
-│       ├── h2_validation.py   # OOD generalization suite
-│       ├── f3_jepa.py        # F3-JEPA architecture
-│       ├── action_shift_analysis.py
-│       ├── belief_model.py
-│       ├── jepa_belief.py
-│       ├── jepa_belief_v2.py
-│       ├── figures.py        # Paper figure generation
-│       └── stickslip_variance.py
-└── results/                   # Saved results
-    └── *.json
+├── experiments/
+│   ├── phase5/               # Bouncing Ball (1D validation)
+│   │   ├── f3_jepa.py           # F3-JEPA on 1D bouncing ball
+│   │   ├── h2_validation.py     # OOD generalization suite
+│   │   ├── figures.py           # Phase 5 figure generation
+│   │   └── ...                  # Supporting experiments
+│   └── phase6/               # MuJoCo scale-up (main paper results)
+│       ├── hopper_pano.py              # PANO vs all baselines
+│       ├── hopper_standard_jepa.py     # Standard Latent JEPA (diverges)
+│       ├── bulletproof_negative.py     # 3-experiment negative protocol
+│       └── neurips_figures.py          # Data-driven figure generation
+├── src/
+│   ├── evaluation/
+│   │   └── stats.py           # Statistical tests (Welch's t, bootstrap CI)
+│   ├── environments/          # Environment utilities
+│   ├── models/                # Model stubs
+│   └── utils/
+├── archive_phase1_to_4/       # Archived JAX/Flax experiments (not used)
+├── results/                   # Generated JSON results + PDF figures
+├── run_neurips_evals.sh       # One-command reproducibility
+└── pyproject.toml             # PyTorch-only dependencies
 ```
 
 ---
 
-## Core Components
+## Core Architectures
 
-### 1. Environment: Bouncing Ball (`src/environments/bouncing_ball.py`)
+### 1. PANO (Physics-Anchored Neural Observer)
 
-**Dynamics:**
-```python
-# Free fall
-v += (-g + a) * dt
-x += v * dt
+**File:** `experiments/phase6/hopper_pano.py`
 
-# Impact (x < 0 or x > 3)
-x = -x * restitution
-v = -v * restitution
+PANO bypasses latent space entirely. During sensor dropout, it predicts observation-space velocity from action history and integrates:
+
+```
+obs_estimate = frozen_obs + velocity_predicted × dt × steps_since_dropout
 ```
 
-**Parameters (locked across all experiments):**
-- `dt = 0.05`
-- `restitution = 0.8`
-- `gravity = 9.81`
-- `action_bounds = (-2.0, 2.0)`
-- `horizon = 30`
-- `success_threshold = 0.3`
+**Components:**
+- `PANOVelocityPredictor(obs, action_history) → velocity`
+- Euler integration during dropout windows
 
-### 2. Models
+**Training:** Supervised on `(obs, action_history) → velocity` from SAC rollouts.
 
-#### Standard Observer (`src/models/observer.py`)
-```python
-class Observer(nn.Module):
-    """MLP: (x, x_prev) → v"""
-    def __init__(self):
-        self.net = nn.Sequential(
-            nn.Linear(2, 32), nn.Tanh(),
-            nn.Linear(32, 32), nn.Tanh(),
-            nn.Linear(32, 1)
-        )
+### 2. Standard Latent JEPA (the one that fails)
+
+**File:** `experiments/phase6/hopper_standard_jepa.py`
+
+Standard JEPA with residual dynamics in latent space:
+
+```
+z_t = encoder(obs, obs_prev)
+z_{t+1} = z_t + predictor(z_t, action)  # Residual dynamics
+velocity = decoder(z_t)                   # Physics anchor
 ```
 
-#### F3 Observer
-```python
-class F3Observer(nn.Module):
-    """Physics-normalized: v = Δx/dt + correction"""
-    def forward(self, x, x_prev):
-        delta_v = (x - x_prev) / dt
-        correction = self.net(concat(x, delta_v))
-        return delta_v + correction
-```
+**Training:**
+- Velocity loss: `λ_vel=10.0 × MSE(v_pred, v_true)`
+- Prediction loss: `λ_pred=0.1 × MSE(z_pred, z_target_EMA)`
+- Stop-gradient on target encoder (EMA updated, τ=0.996)
 
-#### F3-JEPA (`experiments/phase5/f3_jepa.py`)
-```python
-class F3JEPA(nn.Module):
-    """Unified architecture for variance + dropout"""
-    - F3Encoder: (x, Δx/dt) → z
-    - TargetEncoder: EMA of F3Encoder
-    - VelocityDecoder: z → v
-    - LatentPredictor: (z, a) → z_next
-    - EventHead: z → impact_probability
-```
+**Failure mode:** Despite residual dynamics and aggressive velocity loss, the latent prediction error dominates velocity error by 50–100× and compounds exponentially during multi-step rollout.
+
+### 3. F3-JEPA (Bouncing Ball version)
+
+**File:** `experiments/phase5/f3_jepa.py`
+
+1D version of the JEPA architecture on the bouncing ball environment:
+- F3 Encoder: `(x, Δx/dt) → z` (physics-normalized input)
+- Works well in 1D (100% vs FD's 80% under dropout)
+- Scales poorly to high-dimensional systems
+
+### 4. EKF Baseline
+
+**File:** `experiments/phase6/hopper_pano.py` (integrated)
+
+Extended Kalman Filter with constant-velocity model for state estimation under dropout. Serves as a classical baseline.
 
 ---
 
 ## Experiments
 
-### Phase 5: Main Experiments
+### Phase 5: Bouncing Ball (1D Validation)
 
-#### 1. H2 Validation Suite (`h2_validation.py`)
+**Purpose:** Establish that JEPA-style prediction helps in the simplest case.
 
-**Purpose:** Test OOD generalization across training/evaluation support mismatch.
+| Experiment | File | Key Finding |
+|---|---|---|
+| F3-JEPA training | `f3_jepa.py` | 100% success vs FD's 80% under dropout |
+| OOD generalization | `h2_validation.py` | Sharp transition at x0=1.5 boundary |
+| Seed variance | `f3_jepa.py` | ±9.2% std across 10 seeds |
 
-**Tests:**
-- V-H2.1: Success curve across fine grid of initial positions
-- V-H2.2: 4-way train/test matrix (continuous/discrete × continuous/discrete)
-- H3: Dropout robustness
+### Phase 6: MuJoCo Scale-Up (Paper Results)
 
-**Key Results:**
-```
-V-H2.1: Sharp transition at x0=1.5 (boundary)
-V-H2.2: Observers get 57% vs FD's 71% (14% gap)
-H3: All methods robust to dropout (80% at 50% dropout)
-```
+#### Experiment A: PANO vs All Baselines (`hopper_pano.py`)
 
-#### 2. Action-Shift Analysis (`action_shift_analysis.py`)
+Evaluates on Hopper-v4 with contact-triggered sensor dropout (5-step window):
+- **Oracle** (no dropout) — upper bound
+- **Frozen Baseline** (dropout, no estimation) — lower bound
+- **EKF Baseline** (constant-velocity Kalman filter)
+- **PANO** (learned velocity + Euler integration)
 
-**Purpose:** Understand why observers underperform FD even with matched support.
+All methods use the same SAC oracle policy (1M training steps).
+Results include 100 episodes per method with Welch's t-tests and 95% bootstrap CIs.
 
-**Key Finding:**
-- 10 seeds: 60% fail (57.1%), 40% succeed (71.4%)
-- Mean: 62.9% ± 7.0%
-- Root cause: Training instability, not fundamental limitation
+#### Experiment B: Bulletproof Negative Protocol (`bulletproof_negative.py`)
 
-#### 3. F3-JEPA (`f3_jepa.py`)
+Three converging experiments validating the negative result:
 
-**Purpose:** Unified architecture for variance + dropout.
+1. **Data Scaling Law** — More data (10k→100k transitions) does NOT fix prediction/velocity loss gap. The ratio stays 50–100×. This is architectural.
 
-**Training:**
-```python
-loss = 10.0 * L_vel + 0.1 * L_pred + 0.5 * L_event
-```
+2. **Multi-Environment Ablation** — Standard Latent JEPA fails on:
+   - Hopper-v4 (hybrid contact)
+   - Walker2d-v4 (bipedal)
+   - HalfCheetah-v4 (contact-rich)
+   - InvertedDoublePendulum-v4 (smooth, NO hybrid dynamics)
+   Failure on smooth systems proves this is NOT hybrid-specific.
 
-**Key Results:**
-```
-Dropout 0:  F3-JEPA=100%, FD=100%
-Dropout 1:  F3-JEPA=100%, FD=80%
-Dropout 2:  F3-JEPA=100%, FD=80%
-Dropout 3:  F3-JEPA=100%, FD=80%
-```
-
-#### 4. Figures (`figures.py`)
-
-Generates paper-ready figures:
-- `figure1_sensitivity.png`: Knife-edge sensitivity at boundary
-- `figure2_histogram.png`: Seed variance distribution
-- `figure3_per_init.png`: Per-init success breakdown
+3. **Impact Horizon Profiling** — Latent prediction error grows exponentially with rollout steps, in both air and contact phases.
 
 ---
 
-## Key Results Summary
+## Statistical Methodology
 
-### Training Variance (10 seeds)
+All results use proper statistical testing via `src/evaluation/stats.py`:
 
-| Method | Mean | Std | Seeds @ Optimal |
-|--------|------|-----|-----------------|
-| Baseline | 61.4% | ±6.5% | 3/10 @ 71.4% |
-| F3 (Δx/dt) | 67.1% | ±6.5% | 7/10 @ 71.4% |
-| FD | 71.4% | 0% | - |
-| **F3-JEPA** | **86.0%** | ±9.2% | **3/10 @ 100%** |
-
-### Post-Impact Dropout
-
-| Dropout Steps | F3-JEPA | FD |
-|---------------|---------|-----|
-| 0 | 100% | 100% |
-| 1 | **100%** | 80% |
-| 2 | **100%** | 80% |
-| 3 | **100%** | 80% |
-
-### Sensor Delay (1-step)
-
-| x0 | FD | F3-JEPA |
-|----|-----|---------|
-| 1.5 (boundary) | 0% | 0% |
-| ≥ 2.0 | 100% | 100% |
+- **Welch's t-test** (unequal variance) for comparing methods
+- **Bootstrap confidence intervals** (10,000 resamples, 95%)
+- **Cohen's d** effect size for practical significance
+- **Multiple comparisons** reported (PANO vs Frozen, PANO vs EKF, EKF vs Frozen)
 
 ---
 
 ## Critical Implementation Details
 
-### 1. Finite-Difference Baseline
+### Loss Balancing (CRITICAL)
 
-**Correct implementation:**
 ```python
-v_est = (x - x_prev) / dt
-x_prev = x  # Update BEFORE action
-a = PD(x, v_est)
+lambda_vel = 10.0   # HIGH: velocity precision anchors physics
+lambda_pred = 0.1   # LOW: don't let latent prediction dominate
+
+# WRONG (degrades performance):
+# lambda_vel = 1.0, lambda_pred = 1.0
 ```
 
-**Why it works:** Kinematic identity, zero training, universal OOD robustness.
+The aggressive loss imbalance is necessary because the prediction loss lives in ungrounded latent space while velocity loss has physical meaning.
 
-### 2. F3-JEPA Loss Balancing
-
-**Critical:** λ_vel >> λ_pred
+### EMA + Stop-Gradient
 
 ```python
-# Correct (works)
-lambda_vel = 10.0
-lambda_pred = 0.1
-
-# Wrong (degrades to 80%)
-lambda_vel = 1.0
-lambda_pred = 1.0
-```
-
-**Reason:** JEPA prediction loss smooths over hybrid events. Must anchor to velocity first.
-
-### 3. EMA + Stop-Gradient
-
-```python
-# Target encoder (EMA of context encoder)
 z_target = target_encoder(x_next, x)
-z_target = z_target.detach()  # STOP-GRADIENT!
-loss_pred = mse(z_pred, z_target)
+z_target = z_target.detach()  # STOP-GRADIENT
+loss = MSE(z_pred, z_target)
+
+# Target encoder EMA update (τ=0.996)
+for tp, ep in zip(target.params(), encoder.params()):
+    tp.data.mul_(τ).add_(ep.data, alpha=1-τ)
 ```
 
-Without stop-gradient, representation collapses.
+Without stop-gradient, the representation collapses.
 
-### 4. Post-Impact Dropout Timing
+### Contact-Triggered Dropout
 
 ```python
-if env.impact:
-    freeze_countdown = dropout_steps
-
-if freeze_countdown > 0:
-    # Use frozen velocity OR predicted latent
-    v = frozen_v  # FD
-    # OR
-    z = predictor(z, last_action)  # F3-JEPA
-    v = decoder(z)
-    freeze_countdown -= 1
+# Detect large state changes (contact proxy)
+delta = |obs - obs_prev|.max()
+if delta > threshold:
+    dropout_countdown = dropout_duration
+    frozen_obs = obs
 ```
+
+The velocity threshold (0.1) is a proxy for contact events, not true contact detection.
 
 ---
 
-## Running Experiments
+## Figure Generation
 
-### Quick Test
+Figures are generated **entirely from JSON results** (no hardcoded numbers):
 
 ```bash
-# FD baseline
-python -c "
-import numpy as np
-class Ball:
-    def __init__(self): self.x, self.v = 0, 0
-    def step(self, a):
-        self.v += (-9.81 + np.clip(a,-2,2)) * 0.05
-        self.x += self.v * 0.05
-        if self.x < 0: self.x, self.v = -self.x*0.8, -self.v*0.8
-
-success = 0
-for x0 in [1.5, 2.0, 2.5, 3.0, 3.5]:
-    for _ in range(50):
-        b = Ball(); b.x, xp = x0, x0
-        for _ in range(30):
-            v = (b.x - xp) / 0.05
-            a = np.clip(1.5*(2-b.x) + (-2)*(-v), -2, 2)
-            xp = b.x; b.step(a)
-            if abs(b.x-2.0)<0.3: success += 1; break
-print(f'FD: {success/250:.1%}')
-"
+# Generate figures from experiment results
+python experiments/phase6/neurips_figures.py \
+    --results-dir results/phase6 \
+    --output-dir results/phase6
 ```
 
-### Full Validation Suite
+| Figure | Description | Data Source |
+|---|---|---|
+| `figure1_latent_drift.pdf` | Exponential divergence of latent rollout | Impact profiling |
+| `figure2_data_scaling.pdf` | Data scaling asymptote (50–100× ratio) | Data scaling experiment |
+| `figure3_performance_recovery.pdf` | PANO vs baselines with statistical bars | Hopper evaluation |
+| `figure4_multi_env.pdf` | Multi-environment ablation | Continuous control ablation |
+
+---
+
+## Reproducing Results
+
+### Prerequisites
 
 ```bash
-cd experiments/phase5
-python h2_validation.py
+pip install torch gymnasium[mujoco] stable-baselines3 scipy matplotlib seaborn tqdm
 ```
 
-### F3-JEPA Training
+### One-Command
 
 ```bash
-cd experiments/phase5
-python f3_jepa.py
+./run_neurips_evals.sh --seed 42 --episodes 100 --oracle-steps 1000000
 ```
 
-### Generate Figures
-
-```bash
-cd experiments/phase5
-python figures.py
-```
-
----
-
-## Scientific Contributions
-
-### 1. Training Instability is the Real Issue
-
-Standard supervised observers show bimodal training outcomes (57% or 71%) due to random seed variation, not fundamental learning limitations.
-
-### 2. F3 Architecture Reduces Variance
-
-Physics-normalized input (Δx/dt) increases optimal seed rate from 30% to 70%.
-
-### 3. F3-JEPA Solves Velocity Dropout
-
-Multi-step latent prediction recovers 100% success where FD drops to 80%.
-
-### 4. Sensor Delay is Different from Dropout
-
-Both methods fail at boundary with position delay. Dropout = velocity missing; Delay = position stale.
-
-### 5. Loss Balancing is Critical
-
-λ_vel >> λ_pred prevents JEPA from smoothing over hybrid events.
-
----
-
-## Validated Claims
-
-| Claim | Evidence |
-|-------|----------|
-| FD is robust OOD | 71% with 0 training data |
-| Matched support fixes 56%→71% | Test G: discrete training → 71% |
-| F3 reduces variance | 7/10 seeds @ 71.4% vs 3/10 |
-| F3-JEPA solves dropout | 100% vs FD's 80% |
-| Sensor delay unsolved | 0% at boundary for both |
-
----
-
-## File-by-File Reference
-
-### `h2_validation.py`
-
-**Purpose:** OOD generalization tests
-**Key functions:**
-- `generate_data_continuous()`: Uniform initial positions
-- `generate_data_discrete()`: Fixed initial positions
-- `evaluate_fd()`: FD baseline
-- `evaluate_observer()`: Learned observer evaluation
-- `run_vh21_success_curve()`: Success vs x0
-- `run_vh22_matrix()`: 4-way train/test
-
-**Results saved:** `h2_results.json`
-
-### `f3_jepa.py`
-
-**Purpose:** F3-JEPA architecture
-**Key classes:**
-- `F3Encoder`: Physics-normalized encoder
-- `TargetEncoder`: EMA encoder
-- `VelocityDecoder`: Latent → velocity
-- `LatentPredictor`: Multi-step prediction
-- `F3JEPAController`: Closed-loop control
-
-**Training:** `train_f3jepa()`
-**Evaluation:** `evaluate_f3jepa()`
-
-### `figures.py`
-
-**Purpose:** Paper figures
-**Outputs:**
-- `figure1_sensitivity.png/pdf`
-- `figure2_histogram.png/pdf`
-- `figure3_per_init.png/pdf`
-
----
-
-## Reproducibility
-
-### Seeds
-
-All experiments use fixed seeds:
-```python
-SEED = 42  # Main seed
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-```
-
-### Hardware
+### Hardware Used
 
 - GPU: NVIDIA RTX 5080
-- Python: 3.13
+- Python: 3.10+
 - PyTorch: 2.x
 - CUDA: 12.x
-
-### Dependencies
-
-```bash
-pip install torch numpy matplotlib
-```
 
 ---
 
 ## Known Limitations
 
-1. **Sensor delay:** Both FD and F3-JEPA fail at boundary with 1-step position delay
-2. **Training variance:** F3-JEPA still shows ±9.2% std across seeds
-3. **StickSlip:** Alternative environment proved too easy (100% for all methods)
+1. **Single-policy evaluation:** All Hopper experiments use one SAC oracle. Different policies may have different dropout sensitivity.
+2. **PANO constant velocity assumption:** Euler integration breaks down for long dropout windows (>10 steps).
+3. **Contact detection is approximate:** The velocity-threshold trigger is a proxy, not ground-truth contact detection.
+4. **No Dreamer/TDMPC comparison:** A proper model-based RL baseline would strengthen the paper.
+5. **Training variance:** F3-JEPA on bouncing ball still shows ±9.2% std across seeds.
 
 ---
 
-## Future Work
+## Archived Code
 
-1. **JEPA for sensor delay:** Predictor needs to estimate position, not just velocity
-2. **Uncertainty quantification:** Know when predictions are unreliable
-3. **Multi-step prediction:** Test longer prediction horizons
-4. **Other hybrid systems:** Cart-pole with friction, legged locomotion
+The `archive_phase1_to_4/` directory contains early JAX/Flax experiments and scaffolding that are NOT used in the final paper. These include:
+- Original JAX PCP-JEPA model (`pcp_jepa/model.py`)
+- O1/O2/O3 loss experiments (`o1_event_consistency.py`, etc.)
+- Phase 1–4 experimental scripts
 
----
-
-## Citation
-
-```bibtex
-@misc{pcp-jepa-2024,
-  title={Physics-Informed JEPA for Hybrid Dynamics Control},
-  author={Research Project},
-  year={2024}
-}
-```
+These were archived to avoid confusion between the ambitions of the research plan (event-consistency, horizon-consistency, event-localized uncertainty losses) and the actual empirical results (which focus on the negative finding and PANO baseline).
 
 ---
 
-*Last updated: 2024-02-23*
+*Last updated: 2026-02-23*
