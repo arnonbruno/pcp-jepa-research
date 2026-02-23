@@ -1,0 +1,24 @@
+# F3-JEPA / PANO Experiment Requirements
+# Strict versioning for reproducibility
+
+# Core
+python>=3.10,<3.13
+numpy>=1.24.0,<2.0.0
+scipy>=1.11.0,<2.0.0
+
+# PyTorch (CUDA 12.x compatible)
+torch>=2.0.0,<2.6.0
+torchvision>=0.15.0,<0.21.0
+
+# RL Environment
+gymnasium>=0.29.0,<1.1.0
+mujoco>=3.0.0,<4.0.0
+stable-baselines3>=2.0.0,<3.0.0
+
+# Plotting
+matplotlib>=3.7.0,<4.0.0
+seaborn>=0.12.0,<1.0.0
+
+# Utilities
+tqdm>=4.65.0,<5.0.0
+pandas>=2.0.0,<3.0.0
