@@ -68,8 +68,8 @@ print('Oracle saved.')
 "
 fi
 
-echo "Running F3-JEPA v4 (PANO) on Hopper..."
-python hopper_f3jepa_v4.py > ../../results/hopper_v4_results.txt 2>&1
+echo "Running PANO on Hopper..."
+python hopper_pano.py > ../../results/hopper_pano_results.txt 2>&1
 
 echo "Running Bulletproof Negative Protocol..."
 python bulletproof_negative.py > ../../results/bulletproof_results.txt 2>&1
