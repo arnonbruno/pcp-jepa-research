@@ -1,0 +1,26 @@
+[
+  {
+    "method": "Action seq (H=30)",
+    "success": 0.565
+  },
+  {
+    "method": "Knots K=10",
+    "success": 0.565
+  },
+  {
+    "method": "Knots K=5",
+    "success": 0.565
+  },
+  {
+    "method": "Fixed gains",
+    "success": 0.71
+  },
+  {
+    "method": "MPPI gains",
+    "success": 0.565
+  },
+  {
+    "method": "Neural 20p",
+    "success": 0.565
+  }
+]
