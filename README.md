@@ -568,3 +568,38 @@ class PhysicsInformedObserver(nn.Module):
 ```
 
 This structure ensures the network always outputs Δx/dt at initialization, providing a strong physics-consistent starting point.
+
+---
+
+## Burst Dropout Vulnerability (Key for JEPA)
+
+### FD Fragility at Hybrid Events
+
+Post-impact dropout (velocity frozen for N steps after bounce):
+
+| Steps Frozen | Success Rate |
+|--------------|--------------|
+| 0 (baseline) | 100.0% |
+| 1 | 80.0% |
+| 2 | 80.0% |
+| 3+ | 80.0% |
+
+**Critical insight**: Even 1 step of frozen velocity after impact causes 20% drop in success. This is because:
+1. Velocity changes sign at impact (v → -v × restitution)
+2. FD estimate is completely wrong during dropout
+3. Controller uses stale velocity → wrong action
+
+### Why JEPA Can Help
+
+JEPA can learn to predict through impacts:
+- **Prior**: Impact dynamics are learnable (velocity sign flip)
+- **Belief**: Maintain uncertainty about post-impact state
+- **Prediction**: Multi-step prediction handles dropout gracefully
+
+### Next Step
+
+Implement JEPA belief model that:
+1. Uses Δx/dt as physics-informed input (F3 insight)
+2. Predicts time-to-impact as auxiliary task
+3. Handles observation dropout gracefully
+
