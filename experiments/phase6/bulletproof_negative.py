@@ -29,11 +29,53 @@ import argparse
 import warnings
 warnings.filterwarnings('ignore')
 
+# Hugging Face pretrained models
+from huggingface_sb3 import load_from_hub
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Device: {device}")
+
+
+# =============================================================================
+# PRETRAINED EXPERT LOADER
+# =============================================================================
+
+def get_pretrained_oracle(env_id):
+    """Load pretrained expert from RL Baselines3 Zoo on Hugging Face."""
+    env_to_hf = {
+        'Hopper-v4': ('sb3/sac-Hopper-v3', 'sac-Hopper-v3.zip'),
+        'Walker2d-v4': ('sb3/sac-Walker2d-v3', 'sac-Walker2d-v3.zip'),
+        'HalfCheetah-v4': ('sb3/sac-HalfCheetah-v3', 'sac-HalfCheetah-v3.zip'),
+        'InvertedDoublePendulum-v4': ('sb3/sac-InvertedDoublePendulum-v4', 'sac-InvertedDoublePendulum-v4.zip'),
+    }
+    
+    if env_id not in env_to_hf:
+        raise ValueError(f"No pretrained model for {env_id}")
+    
+    repo_id, filename = env_to_hf[env_id]
+    
+    print(f"  Downloading pretrained expert: {repo_id}")
+    checkpoint = load_from_hub(repo_id=repo_id, filename=filename)
+    
+    env = gym.make(env_id)
+    model = SAC.load(checkpoint, env=env)
+    
+    # Quick test
+    obs, _ = env.reset()
+    total_reward = 0
+    for _ in range(1000):
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, term, trunc, _ = env.step(action)
+        total_reward += reward
+        if term or trunc:
+            break
+    env.close()
+    print(f"  ✓ Expert loaded, performance: {total_reward:.0f}")
+    
+    return model
 
 # =============================================================================
 # STANDARD LATENT JEPA ARCHITECTURE (the one that diverges)
@@ -227,7 +269,7 @@ def experiment_1_data_scaling(sac_model, env, dt, seed=42):
 # EXPERIMENT 2: CONTINUOUS CONTROL ABLATION (Multiple Environments)
 # =============================================================================
 
-def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_episodes=50):
+def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_episodes=50, use_pretrained=True):
     """
     Test Standard Latent JEPA on multiple MuJoCo environments:
       - Hopper-v4 (hybrid/contact)
@@ -264,16 +306,19 @@ def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_epi
         action_dim = env.action_space.shape[0]
         print(f"  Obs dim: {obs_dim}, Action dim: {action_dim}")
 
-        # Train oracle
-        oracle_path = f'{env_id.replace("-", "_").lower()}_sac.zip'
-        if os.path.exists(oracle_path):
-            sac = SAC.load(oracle_path, env=env)
+        # Load oracle
+        if use_pretrained:
+            sac = get_pretrained_oracle(env_id)
         else:
-            print(f"  Training SAC oracle ({oracle_steps:,} steps)...")
-            sac = SAC('MlpPolicy', env, learning_rate=3e-4, buffer_size=300_000,
-                       learning_starts=10_000, batch_size=256, verbose=0, seed=seed)
-            sac.learn(total_timesteps=oracle_steps, progress_bar=True)
-            sac.save(oracle_path)
+            oracle_path = f'{env_id.replace("-", "_").lower()}_sac.zip'
+            if os.path.exists(oracle_path):
+                sac = SAC.load(oracle_path, env=env)
+            else:
+                print(f"  Training SAC oracle ({oracle_steps:,} steps)...")
+                sac = SAC('MlpPolicy', env, learning_rate=3e-4, buffer_size=300_000,
+                           learning_starts=10_000, batch_size=256, verbose=0, seed=seed)
+                sac.learn(total_timesteps=oracle_steps, progress_bar=True)
+                sac.save(oracle_path)
 
         # Evaluate oracle (no dropout)
         oracle_rewards = []
@@ -548,14 +593,11 @@ if __name__ == '__main__':
     print("  3. Impact Horizon Profiling (quantify exponential drift)")
     print("=" * 70)
 
-    # Load Hopper oracle for experiments 1 & 3
-    oracle_path = 'hopper_sac.zip'
-    if not os.path.exists(oracle_path):
-        from hopper_pano import train_oracle
-        train_oracle(oracle_path, total_timesteps=args.oracle_steps, seed=args.seed)
+    # Load Hopper oracle for experiments 1 & 3 (using pretrained)
+    print("\nLoading Hopper pretrained expert...")
+    sac = get_pretrained_oracle('Hopper-v4')
 
     env = gym.make('Hopper-v4')
-    sac = SAC.load(oracle_path, env=env)
 
     # Experiment 1: Data Scaling
     exp1_results = experiment_1_data_scaling(sac, env, dt=0.002, seed=args.seed)

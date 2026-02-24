@@ -24,6 +24,9 @@ import warnings
 import argparse
 warnings.filterwarnings('ignore')
 
+# Hugging Face pretrained models
+from huggingface_sb3 import load_from_hub
+
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
@@ -31,14 +34,54 @@ from src.evaluation.stats import summarize_results, compare_methods, save_result
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # =============================================================================
-# ORACLE
+# ORACLE - PRETRAINED EXPERT FROM HUGGING FACE
 # =============================================================================
 
+def get_pretrained_oracle(env_id='Hopper-v4'):
+    """Load pretrained expert from RL Baselines3 Zoo on Hugging Face.
+    
+    Expert scores: Hopper >3000, Walker2d >4000, HalfCheetah >8000
+    """
+    # Map v4 envs to v3 model names (same state/action spaces)
+    env_to_hf = {
+        'Hopper-v4': ('sb3/sac-Hopper-v3', 'sac-Hopper-v3.zip'),
+        'Walker2d-v4': ('sb3/sac-Walker2d-v3', 'sac-Walker2d-v3.zip'),
+        'HalfCheetah-v4': ('sb3/sac-HalfCheetah-v3', 'sac-HalfCheetah-v3.zip'),
+    }
+    
+    if env_id not in env_to_hf:
+        raise ValueError(f"No pretrained model for {env_id}")
+    
+    repo_id, filename = env_to_hf[env_id]
+    
+    print(f"Downloading pretrained expert from HuggingFace: {repo_id}")
+    checkpoint = load_from_hub(repo_id=repo_id, filename=filename)
+    
+    env = gym.make(env_id)
+    model = SAC.load(checkpoint, env=env)
+    print(f"✓ Expert loaded successfully")
+    
+    # Quick test
+    obs, _ = env.reset()
+    total_reward = 0
+    for _ in range(1000):
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, term, trunc, _ = env.step(action)
+        total_reward += reward
+        if term or trunc:
+            break
+    env.close()
+    print(f"  Expert performance: {total_reward:.0f} (expected >2000 for Hopper)")
+    
+    return model
+
+
 def get_oracle(model_path='hopper_sac.zip'):
+    """Legacy: load local oracle if exists, otherwise use pretrained."""
     if os.path.exists(model_path):
         env = gym.make('Hopper-v4')
         return SAC.load(model_path, env=env)
-    raise FileNotFoundError(f"Oracle not found at {model_path}. Train it first.")
+    return get_pretrained_oracle('Hopper-v4')
 
 
 def train_oracle(model_path='hopper_sac.zip', total_timesteps=1_000_000, seed=42):
@@ -412,7 +455,8 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
 
 def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
                    oracle_path='hopper_sac.zip', oracle_steps=1_000_000,
-                   results_dir='../../results', seed=42, retrain_oracle=False):
+                   results_dir='../../results', seed=42, retrain_oracle=False,
+                   use_pretrained=True):
     """Run full PANO experiment with all baselines and statistical tests."""
 
     np.random.seed(seed)
@@ -426,8 +470,11 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print(f"  Seed:                {seed}")
     print("=" * 70)
 
-    # --- Train or load oracle ---
-    if os.path.exists(oracle_path) and not retrain_oracle:
+    # --- Load oracle ---
+    if use_pretrained:
+        print("\n[0/5] Loading pretrained expert from HuggingFace...")
+        sac_model = get_pretrained_oracle('Hopper-v4')
+    elif os.path.exists(oracle_path) and not retrain_oracle:
         print(f"  Loading existing oracle from {oracle_path}")
         print(f"  WARNING: If this oracle was trained with fewer steps, delete it and re-run.")
         sac_model = get_oracle(oracle_path)
