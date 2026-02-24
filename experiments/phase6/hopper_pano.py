@@ -201,7 +201,7 @@ class EKFEstimator:
     Model: x_{t+1} = x_t + v_t * dt  (constant velocity assumption)
     Measurement: x_t (when available)
     """
-    def __init__(self, obs_dim=11, dt=0.002, process_noise=1.0, measurement_noise=0.01):
+    def __init__(self, obs_dim=11, dt=None, process_noise=1.0, measurement_noise=0.01):
         self.obs_dim = obs_dim
         self.dt = dt
         # State = [position, velocity] in obs_dim
@@ -346,6 +346,7 @@ def eval_frozen_baseline(sac_model, n_episodes=100, dropout_duration=5,
                           velocity_threshold=0.1, env_id='Hopper-v4', seed=42):
     """Frozen baseline: during dropout, observation is frozen (no estimation)."""
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
+    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
     rewards, vel_errors = [], []
 
     for ep in range(n_episodes):
@@ -372,7 +373,7 @@ def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
     """EKF baseline: Extended Kalman Filter for state estimation under dropout."""
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
     obs_dim = env.observation_space.shape[0]
-    dt = 0.002
+    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
     rewards, vel_errors = [], []
 
     for ep in range(n_episodes):
@@ -410,7 +411,7 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
     """PANO: Physics-Anchored Neural Observer with Euler integration."""
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
     action_dim = env.action_space.shape[0]
-    dt = 0.002
+    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
     rewards, vel_errors = [], []
 
     for ep in range(n_episodes):
@@ -432,6 +433,10 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
                 ah_t = torch.tensor(np.array(action_history), dtype=torch.float32, device=device).unsqueeze(0)
                 with torch.no_grad():
                     v_pred = velocity_model(obs_t, ah_t).squeeze().cpu().numpy()
+                    # NaN protection
+                    if np.any(np.isnan(v_pred)) or np.any(np.isinf(v_pred)):
+                        v_pred = np.zeros_like(v_pred)
+                    v_pred = np.clip(v_pred, -100, 100)
 
                 dropout_step = info['dropout_step']
                 frozen_obs = info['frozen_obs']

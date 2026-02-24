@@ -1,0 +1,149 @@
+{
+  "experiment": "bulletproof_negative",
+  "seed": 42,
+  "data_scaling": [
+    {
+      "n_transitions": 10000,
+      "velocity_loss": 11.494706258773803,
+      "prediction_loss": 2130.04862487793,
+      "ratio": 185.30692086185448
+    },
+    {
+      "n_transitions": 30000,
+      "velocity_loss": 7.552254498611062,
+      "prediction_loss": 908.133081675384,
+      "ratio": 120.24662048133214
+    },
+    {
+      "n_transitions": 100000,
+      "velocity_loss": 3.59508326529237,
+      "prediction_loss": 272.28213905275936,
+      "ratio": 75.73736634254071
+    }
+  ],
+  "multi_env_ablation": [
+    {
+      "env_id": "Hopper-v4",
+      "obs_dim": 11,
+      "action_dim": 3,
+      "dt": 0.002,
+      "oracle_reward_mean": 1109.2943677583526,
+      "oracle_reward_std": 34.18087221523424,
+      "baseline_reward_mean": 361.245652090945,
+      "baseline_reward_std": 241.38725962994565,
+      "jepa_reward_mean": 241.21923160208803,
+      "jepa_reward_std": 180.66154185786186,
+      "velocity_loss": 5.622353898262491,
+      "prediction_loss": 550.6801162719727,
+      "loss_ratio": 97.94476215072568,
+      "jepa_vs_baseline_p_value": 0.006485135638800249,
+      "jepa_vs_baseline_cohens_d": -0.5573238852487749
+    },
+    {
+      "env_id": "Walker2d-v4",
+      "obs_dim": 17,
+      "action_dim": 6,
+      "dt": 0.002,
+      "oracle_reward_mean": 3782.7874381496936,
+      "oracle_reward_std": 331.69618280050327,
+      "baseline_reward_mean": 175.80989132507423,
+      "baseline_reward_std": 274.1326713765072,
+      "jepa_reward_mean": 222.24540917786467,
+      "jepa_reward_std": 233.84923988126536,
+      "velocity_loss": 70.13660017714209,
+      "prediction_loss": 32389.918586575255,
+      "loss_ratio": 461.8119284389436,
+      "jepa_vs_baseline_p_value": 0.3692713623883841,
+      "jepa_vs_baseline_cohens_d": 0.1804196329516961
+    },
+    {
+      "env_id": "HalfCheetah-v4",
+      "obs_dim": 17,
+      "action_dim": 6,
+      "dt": 0.01,
+      "oracle_reward_mean": 9408.666920849706,
+      "oracle_reward_std": 96.18044473040601,
+      "baseline_reward_mean": 207.24973556202852,
+      "baseline_reward_std": 129.91902530375026,
+      "jepa_reward_mean": 586.4815085782392,
+      "jepa_reward_std": 261.98596315256685,
+      "velocity_loss": 73.50309942595813,
+      "prediction_loss": 6753.208987364477,
+      "loss_ratio": 91.8765200268653,
+      "jepa_vs_baseline_p_value": 1.5462974273758684e-13,
+      "jepa_vs_baseline_cohens_d": 1.8155578165289357
+    }
+  ],
+  "impact_profiling": [
+    {
+      "step": 1,
+      "overall_error": 151.12279383632725,
+      "air_error": 151.12279383632725,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 2,
+      "overall_error": 243.69048404942055,
+      "air_error": 243.69048404942055,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 3,
+      "overall_error": 371.37269338476875,
+      "air_error": 371.37269338476875,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 4,
+      "overall_error": 577.6014277715243,
+      "air_error": 577.6014277715243,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 5,
+      "overall_error": 831.784619574652,
+      "air_error": 831.784619574652,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 6,
+      "overall_error": 1134.75859601856,
+      "air_error": 1134.75859601856,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 7,
+      "overall_error": 1486.9732316124177,
+      "air_error": 1486.9732316124177,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 8,
+      "overall_error": 1918.1599563581433,
+      "air_error": 1918.1599563581433,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 9,
+      "overall_error": 2388.369499388104,
+      "air_error": 2388.369499388104,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    },
+    {
+      "step": 10,
+      "overall_error": 2898.4437187324784,
+      "air_error": 2898.4437187324784,
+      "impact_error": 0.0,
+      "impact_air_ratio": 0.0
+    }
+  ]
+}
