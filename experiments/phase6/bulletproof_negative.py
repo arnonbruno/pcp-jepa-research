@@ -617,9 +617,10 @@ if __name__ == '__main__':
     sac = get_pretrained_oracle('Hopper-v4')
 
     env = gym.make('Hopper-v4')
+    dt_actual = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.002
 
     # Experiment 1: Data Scaling
-    exp1_results = experiment_1_data_scaling(sac, env, dt=0.002, seed=args.seed)
+    exp1_results = experiment_1_data_scaling(sac, env, dt=dt_actual, seed=args.seed)
 
     # Experiment 2: Multi-environment ablation
     exp2_results = experiment_2_continuous_ablation(
