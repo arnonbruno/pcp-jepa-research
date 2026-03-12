@@ -47,6 +47,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Device: {device}")
 
 
+def get_env_dt(env, default=0.002):
+    """Resolve dt from either a raw Gym env or a wrapped env."""
+    base_env = getattr(env, 'env', env)
+    unwrapped = getattr(base_env, 'unwrapped', base_env)
+    return float(getattr(unwrapped, 'dt', default))
+
+
 # =============================================================================
 # PRETRAINED EXPERT LOADER
 # =============================================================================
@@ -369,7 +376,7 @@ def experiment_3_impact_profiling(sac_model, seed=42):
     env = ContactDropoutEnv('Hopper-v4', dropout_duration=0)
     obs_dim = 11
     action_dim = 3
-    dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.008
+    dt = get_env_dt(env, default=0.008)
 
     # Generate data with phase labels
     print("  Generating data with phase labels...")

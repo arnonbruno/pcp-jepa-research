@@ -92,7 +92,7 @@ def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', d
     return data
 
 def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-v4', device='cuda', seed=42):
-    """Generate training data for PANO velocity predictor."""
+    """Generate training data for the forward PANO velocity predictor."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
@@ -105,7 +105,6 @@ def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
-        obs_prev = obs.copy()
         action_history = [np.zeros(action_dim) for _ in range(history_len)]
 
         for step in range(1000):
@@ -114,13 +113,12 @@ def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-
             action_history.append(action.copy())
 
             obs_next, _, term, trunc, _ = env.step(action)
-            velocity = (obs - obs_prev) / dt
+            velocity = (obs_next - obs) / dt
 
             data['obs'].append(obs.copy())
             data['action_history'].append(np.array(action_history))
             data['velocity'].append(velocity)
 
-            obs_prev = obs.copy()
             obs = obs_next
             if term or trunc:
                 break

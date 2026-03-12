@@ -42,6 +42,7 @@ from src.utils.training import train_pano
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+TRAIN_EVAL_SEED_OFFSET = 10_000
 
 # =============================================================================
 # ORACLE - PRETRAINED EXPERT FROM HUGGING FACE
@@ -134,6 +135,23 @@ def train_oracle(model_path='hopper_sac.zip', total_timesteps=1_000_000, seed=42
 # =============================================================================
 
 
+def get_env_dt(env, default=0.002):
+    """Resolve dt from either a raw Gym env or a wrapped env."""
+    base_env = getattr(env, 'env', env)
+    unwrapped = getattr(base_env, 'unwrapped', base_env)
+    return float(getattr(unwrapped, 'dt', default))
+
+
+def relabel_state_error_metric(result):
+    """Rename legacy velocity-error keys to the actual state-estimation metric."""
+    if 'velocity_error_mean' in result:
+        result['state_estimation_error_mean'] = result.pop('velocity_error_mean')
+    if 'velocity_error_std' in result:
+        result['state_estimation_error_std'] = result.pop('velocity_error_std')
+    result['error_metric'] = 'mean_absolute_state_estimation_error'
+    return result
+
+
 def collect_ekf_calibration(
     sac_model,
     env_id='Hopper-v4',
@@ -179,7 +197,7 @@ def collect_ekf_calibration(
 
     calibration = EKFEstimator.auto_calibrate(
         trajectories,
-        dt=env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002,
+        dt=get_env_dt(env),
         env_id=env_id,
         dropout_masks=dropout_masks,
     )
@@ -217,8 +235,7 @@ def eval_frozen_baseline(sac_model, n_episodes=100, dropout_duration=5,
                           velocity_threshold=0.1, env_id='Hopper-v4', seed=42):
     """Frozen baseline: during dropout, observation is frozen (no estimation)."""
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
-    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
-    rewards, vel_errors = [], []
+    rewards, state_errors = [], []
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -228,14 +245,14 @@ def eval_frozen_baseline(sac_model, n_episodes=100, dropout_duration=5,
             obs, reward, term, trunc, info = env.step(action)
             total_reward += reward
             if info['dropout_active']:
-                true_v = info['true_obs'] - info['frozen_obs']
-                vel_errors.append(np.mean(np.abs(true_v)))
+                state_errors.append(np.mean(np.abs(info['true_obs'] - info['frozen_obs'])))
             if term or trunc:
                 break
         rewards.append(total_reward)
 
     result = summarize_results('Frozen Baseline (dropout)', np.array(rewards),
-                               np.array(vel_errors) if vel_errors else None)
+                               np.array(state_errors) if state_errors else None)
+    result = relabel_state_error_metric(result)
     result['contact_force_threshold'] = float(env.contact_force_threshold)
     result['contact_source'] = getattr(env, '_contact_source', None)
     env.close()
@@ -247,8 +264,8 @@ def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
     """EKF baseline: Extended Kalman Filter for state estimation under dropout."""
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
     obs_dim = env.observation_space.shape[0]
-    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
-    rewards, vel_errors = [], []
+    dt = get_env_dt(env)
+    rewards, state_errors = [], []
     calibration = collect_ekf_calibration(
         sac_model,
         env_id=env_id,
@@ -282,7 +299,7 @@ def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
             if info['dropout_active']:
                 # No measurement update; use EKF prediction
                 obs = ekf.get_obs_estimate()
-                vel_errors.append(np.mean(np.abs(obs - info['true_obs'])))
+                state_errors.append(np.mean(np.abs(obs - info['true_obs'])))
             else:
                 ekf.update(obs_raw)
                 obs = obs_raw
@@ -292,7 +309,8 @@ def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
         rewards.append(total_reward)
 
     result = summarize_results('EKF Baseline (dropout)', np.array(rewards),
-                               np.array(vel_errors) if vel_errors else None)
+                               np.array(state_errors) if state_errors else None)
+    result = relabel_state_error_metric(result)
     result['tuning'] = calibration
     result['contact_force_threshold'] = float(env.contact_force_threshold)
     result['contact_source'] = getattr(env, '_contact_source', None)
@@ -305,8 +323,8 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
     """PANO: Physics-Anchored Neural Observer with Euler integration."""
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
     action_dim = env.action_space.shape[0]
-    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
-    rewards, vel_errors = [], []
+    dt = get_env_dt(env)
+    rewards, state_errors = [], []
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -336,7 +354,7 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
                 frozen_obs = info['frozen_obs']
                 obs = frozen_obs + v_pred * dt * (dropout_step + 1)
 
-                vel_errors.append(np.mean(np.abs(obs - info['true_obs'])))
+                state_errors.append(np.mean(np.abs(obs - info['true_obs'])))
             else:
                 obs = obs_raw
 
@@ -345,7 +363,8 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
         rewards.append(total_reward)
 
     result = summarize_results('PANO (dropout)', np.array(rewards),
-                               np.array(vel_errors) if vel_errors else None)
+                               np.array(state_errors) if state_errors else None)
+    result = relabel_state_error_metric(result)
     result['contact_force_threshold'] = float(env.contact_force_threshold)
     result['contact_source'] = getattr(env, '_contact_source', None)
     env.close()
@@ -363,6 +382,8 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
 
     np.random.seed(seed)
     torch.manual_seed(seed)
+    train_seed = seed
+    eval_seed = seed + TRAIN_EVAL_SEED_OFFSET
 
     print("=" * 70)
     print("PANO EVALUATION: Hopper-v4 with Contact-Triggered Dropout")
@@ -370,6 +391,8 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print(f"  Episodes per method: {n_episodes}")
     print(f"  Dropout duration:    {dropout_duration} steps")
     print(f"  Seed:                {seed}")
+    print(f"  Train seed:          {train_seed}")
+    print(f"  Eval seed:           {eval_seed}")
     print("=" * 70)
 
     # --- Load oracle ---
@@ -390,34 +413,39 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print("\n[1/5] Training PANO velocity predictor...")
     obs_dim = 11
     action_dim = 3
-    data = generate_training_data(sac_model, n_episodes=train_episodes, history_len=5)
+    data = generate_training_data(
+        sac_model,
+        n_episodes=train_episodes,
+        history_len=5,
+        seed=train_seed,
+    )
     pano_model = PANOVelocityPredictor(obs_dim, action_dim, history_len=5).to(device)
     pano_model = train_pano(pano_model, data, n_epochs=train_epochs)
 
     # --- Evaluate all methods ---
     print(f"\n[2/5] Evaluating Oracle (no dropout, {n_episodes} episodes)...")
-    oracle_results = eval_oracle(sac_model, n_episodes=n_episodes, seed=seed)
+    oracle_results = eval_oracle(sac_model, n_episodes=n_episodes, seed=eval_seed)
     print(f"  Reward: {oracle_results['reward_mean']:.1f} "
           f"[{oracle_results['reward_ci_95_lower']:.1f}, {oracle_results['reward_ci_95_upper']:.1f}]")
 
     print(f"\n[3/5] Evaluating Frozen Baseline ({n_episodes} episodes)...")
     frozen_results = eval_frozen_baseline(sac_model, n_episodes=n_episodes,
                                            dropout_duration=dropout_duration,
-                                           velocity_threshold=velocity_threshold, seed=seed)
+                                           velocity_threshold=velocity_threshold, seed=eval_seed)
     print(f"  Reward: {frozen_results['reward_mean']:.1f} "
           f"[{frozen_results['reward_ci_95_lower']:.1f}, {frozen_results['reward_ci_95_upper']:.1f}]")
 
     print(f"\n[4/5] Evaluating EKF Baseline ({n_episodes} episodes)...")
     ekf_results = eval_ekf(sac_model, n_episodes=n_episodes,
                             dropout_duration=dropout_duration,
-                            velocity_threshold=velocity_threshold, seed=seed)
+                            velocity_threshold=velocity_threshold, seed=eval_seed)
     print(f"  Reward: {ekf_results['reward_mean']:.1f} "
           f"[{ekf_results['reward_ci_95_lower']:.1f}, {ekf_results['reward_ci_95_upper']:.1f}]")
 
     print(f"\n[5/5] Evaluating PANO ({n_episodes} episodes)...")
     pano_results = eval_pano(sac_model, pano_model, n_episodes=n_episodes,
                               dropout_duration=dropout_duration,
-                              velocity_threshold=velocity_threshold, seed=seed)
+                              velocity_threshold=velocity_threshold, seed=eval_seed)
     print(f"  Reward: {pano_results['reward_mean']:.1f} "
           f"[{pano_results['reward_ci_95_lower']:.1f}, {pano_results['reward_ci_95_upper']:.1f}]")
 
@@ -450,10 +478,13 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print("\n" + "=" * 70)
     print("RESULTS SUMMARY")
     print("=" * 70)
-    print(f"{'Method':<30} {'Reward':>12} {'95% CI':>20} {'Vel Err':>10}")
+    print(f"{'Method':<30} {'Reward':>12} {'95% CI':>20} {'State Err':>10}")
     print("-" * 72)
     for r in [oracle_results, frozen_results, ekf_results, pano_results]:
-        vel = f"{r.get('velocity_error_mean', 0):.1f}" if 'velocity_error_mean' in r else '-'
+        vel = (
+            f"{r.get('state_estimation_error_mean', 0):.1f}"
+            if 'state_estimation_error_mean' in r else '-'
+        )
         print(f"{r['method']:<30} {r['reward_mean']:>8.1f} ± {r['reward_std']:>4.1f}"
               f"  [{r['reward_ci_95_lower']:>6.1f}, {r['reward_ci_95_upper']:>6.1f}]"
               f"  {vel:>10}")
@@ -466,6 +497,8 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
         'dropout_duration': dropout_duration,
         'velocity_threshold': velocity_threshold,
         'seed': seed,
+        'train_seed': train_seed,
+        'eval_seed': eval_seed,
         'methods': {
             'oracle': oracle_results,
             'frozen_baseline': frozen_results,

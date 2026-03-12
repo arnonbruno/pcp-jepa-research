@@ -26,6 +26,7 @@ from src.envs.contact_dropout import ContactDropoutEnv
 from src.evaluation.stats import summarize_results, compare_methods, save_results
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+TRAIN_EVAL_SEED_OFFSET = 10_000
 
 # =============================================================================
 # DATA GENERATION FOR SEQUENTIAL MODELS
@@ -57,6 +58,16 @@ def generate_trajectory_data(sac_model, n_episodes=300, max_len=1000, env_id='Ho
         
     env.close()
     return trajectories
+
+
+def relabel_state_error_metric(result):
+    """Rename legacy velocity-error keys to the actual state-estimation metric."""
+    if 'velocity_error_mean' in result:
+        result['state_estimation_error_mean'] = result.pop('velocity_error_mean')
+    if 'velocity_error_std' in result:
+        result['state_estimation_error_std'] = result.pop('velocity_error_std')
+    result['error_metric'] = 'mean_absolute_state_estimation_error'
+    return result
 
 def create_batches(trajectories, seq_len=16, batch_size=64):
     """Create fixed-length sequence batches from trajectories."""
@@ -352,7 +363,7 @@ def eval_oracle(sac_model, n_episodes=100, env_id='Hopper-v4', seed=42):
 
 def eval_frozen_baseline(sac_model, n_episodes=100, dropout_duration=5, velocity_threshold=0.1, env_id='Hopper-v4', seed=42):
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
-    rewards, vel_errors = [], []
+    rewards, state_errors = [], []
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
         total_reward = 0.0
@@ -361,18 +372,18 @@ def eval_frozen_baseline(sac_model, n_episodes=100, dropout_duration=5, velocity
             obs, reward, term, trunc, info = env.step(action)
             total_reward += reward
             if info['dropout_active']:
-                true_v = info['true_obs'] - info['frozen_obs']
-                vel_errors.append(np.mean(np.abs(true_v)))
+                state_errors.append(np.mean(np.abs(info['true_obs'] - info['frozen_obs'])))
             if term or trunc:
                 break
         rewards.append(total_reward)
-    res = summarize_results('Frozen Baseline', np.array(rewards), np.array(vel_errors) if vel_errors else None)
+    res = summarize_results('Frozen Baseline', np.array(rewards), np.array(state_errors) if state_errors else None)
+    res = relabel_state_error_metric(res)
     env.close()
     return res
 
 def eval_rssm(sac_model, rssm, n_episodes=100, dropout_duration=5, velocity_threshold=0.1, env_id='Hopper-v4', seed=42):
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
-    rewards, vel_errors = [], []
+    rewards, state_errors = [], []
     
     rssm.eval()
     
@@ -398,7 +409,7 @@ def eval_rssm(sac_model, rssm, n_episodes=100, dropout_duration=5, velocity_thre
                 with torch.no_grad():
                     h, z, obs_pred = rssm.hallucinate(h, z, act_t)
                 obs = obs_pred.squeeze(0).cpu().numpy()
-                vel_errors.append(np.mean(np.abs(obs - info['true_obs'])))
+                state_errors.append(np.mean(np.abs(obs - info['true_obs'])))
             else:
                 # Update latent with true observation
                 with torch.no_grad():
@@ -409,13 +420,14 @@ def eval_rssm(sac_model, rssm, n_episodes=100, dropout_duration=5, velocity_thre
                 break
         rewards.append(total_reward)
         
-    res = summarize_results('Simplified RSSM', np.array(rewards), np.array(vel_errors) if vel_errors else None)
+    res = summarize_results('Simplified RSSM', np.array(rewards), np.array(state_errors) if state_errors else None)
+    res = relabel_state_error_metric(res)
     env.close()
     return res
 
 def eval_told(sac_model, told, n_episodes=100, dropout_duration=5, velocity_threshold=0.1, env_id='Hopper-v4', seed=42):
     env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
-    rewards, vel_errors = [], []
+    rewards, state_errors = [], []
     
     told.eval()
     
@@ -439,7 +451,7 @@ def eval_told(sac_model, told, n_episodes=100, dropout_duration=5, velocity_thre
                 with torch.no_grad():
                     z, obs_pred = told.step(z, act_t)
                 obs = obs_pred.squeeze(0).cpu().numpy()
-                vel_errors.append(np.mean(np.abs(obs - info['true_obs'])))
+                state_errors.append(np.mean(np.abs(obs - info['true_obs'])))
             else:
                 # Re-encode true observation
                 with torch.no_grad():
@@ -450,7 +462,8 @@ def eval_told(sac_model, told, n_episodes=100, dropout_duration=5, velocity_thre
                 break
         rewards.append(total_reward)
         
-    res = summarize_results('Simplified TOLD', np.array(rewards), np.array(vel_errors) if vel_errors else None)
+    res = summarize_results('Simplified TOLD', np.array(rewards), np.array(state_errors) if state_errors else None)
+    res = relabel_state_error_metric(res)
     env.close()
     return res
 
@@ -466,16 +479,20 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     
     np.random.seed(seed)
     torch.manual_seed(seed)
+    train_seed = seed
+    eval_seed = seed + TRAIN_EVAL_SEED_OFFSET
     
     print("=" * 70)
     print("SIMPLIFIED WORLD MODELS EVALUATION: Contact-Triggered Dropout")
     print("=" * 70)
+    print(f"Train seed: {train_seed}")
+    print(f"Eval seed:  {eval_seed}")
     
     print("\n[1/4] Loading pretrained Oracle...")
     sac_model = get_pretrained_oracle('Hopper-v4')
     
     print(f"\n[2/4] Generating training data for World Models ({train_episodes} episodes)...")
-    trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes, seed=seed)
+    trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes, seed=train_seed)
     env = gym.make('Hopper-v4')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
@@ -485,16 +502,16 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     
     print(f"\n[3/4] Evaluating Models ({n_episodes} episodes)...")
     
-    oracle_res = eval_oracle(sac_model, n_episodes, seed=seed)
+    oracle_res = eval_oracle(sac_model, n_episodes, seed=eval_seed)
     print(f"  Oracle: {oracle_res['reward_mean']:.1f}")
     
-    frozen_res = eval_frozen_baseline(sac_model, n_episodes, dropout_duration, velocity_threshold, seed=seed)
+    frozen_res = eval_frozen_baseline(sac_model, n_episodes, dropout_duration, velocity_threshold, seed=eval_seed)
     print(f"  Frozen: {frozen_res['reward_mean']:.1f}")
     
-    rssm_res = eval_rssm(sac_model, rssm, n_episodes, dropout_duration, velocity_threshold, seed=seed)
+    rssm_res = eval_rssm(sac_model, rssm, n_episodes, dropout_duration, velocity_threshold, seed=eval_seed)
     print(f"  Simplified RSSM: {rssm_res['reward_mean']:.1f}")
     
-    told_res = eval_told(sac_model, told, n_episodes, dropout_duration, velocity_threshold, seed=seed)
+    told_res = eval_told(sac_model, told, n_episodes, dropout_duration, velocity_threshold, seed=eval_seed)
     print(f"  Simplified TOLD: {told_res['reward_mean']:.1f}")
     
     print("\n" + "=" * 70)
@@ -518,10 +535,13 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print("\n" + "=" * 70)
     print("RESULTS SUMMARY")
     print("=" * 70)
-    print(f"{'Method':<30} {'Reward':>12} {'95% CI':>20} {'Vel Err':>10}")
+    print(f"{'Method':<30} {'Reward':>12} {'95% CI':>20} {'State Err':>10}")
     print("-" * 72)
     for r in [oracle_res, frozen_res, rssm_res, told_res]:
-        vel = f"{r.get('velocity_error_mean', 0):.1f}" if 'velocity_error_mean' in r else '-'
+        vel = (
+            f"{r.get('state_estimation_error_mean', 0):.1f}"
+            if 'state_estimation_error_mean' in r else '-'
+        )
         print(f"{r['method']:<30} {r['reward_mean']:>8.1f} ± {r['reward_std']:>4.1f}"
               f"  [{r['reward_ci_95_lower']:>6.1f}, {r['reward_ci_95_upper']:>6.1f}]"
               f"  {vel:>10}")
@@ -534,6 +554,9 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
         'env_id': 'Hopper-v4',
         'n_episodes': n_episodes,
         'dropout_duration': dropout_duration,
+        'seed': seed,
+        'train_seed': train_seed,
+        'eval_seed': eval_seed,
         'methods': {
             'oracle': oracle_res,
             'frozen': frozen_res,
