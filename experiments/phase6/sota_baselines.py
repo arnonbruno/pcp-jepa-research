@@ -34,7 +34,10 @@ TRAIN_EVAL_SEED_OFFSET = 10_000
 
 def generate_trajectory_data(sac_model, n_episodes=300, max_len=1000, env_id='Hopper-v4', seed=42):
     """Generate full trajectories for training sequence models (World Models)."""
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     trajectories = []
     
     for ep in range(n_episodes):
@@ -339,16 +342,25 @@ def get_pretrained_oracle(env_id='Hopper-v4'):
     """Load pretrained expert from RL Baselines3 Zoo on Hugging Face."""
     env_to_hf = {
         'Hopper-v4': ('sb3/sac-Hopper-v3', 'sac-Hopper-v3.zip'),
+        'Walker2d-v4': ('sb3/sac-Walker2d-v3', 'sac-Walker2d-v3.zip'),
+        'HalfCheetah-v4': ('sb3/sac-HalfCheetah-v3', 'sac-HalfCheetah-v3.zip'),
+        'Ant-v4': ('sb3/sac-Ant-v3', 'sac-Ant-v3.zip'),
     }
     repo_id, filename = env_to_hf[env_id]
     checkpoint = load_from_hub(repo_id=repo_id, filename=filename)
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     model = SAC.load(checkpoint, env=env)
     env.close()
     return model
 
 def eval_oracle(sac_model, n_episodes=100, env_id='Hopper-v4', seed=42):
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     rewards = []
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -496,7 +508,10 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     
     print(f"\n[2/4] Generating training data for World Models ({train_episodes} episodes)...")
     trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes, env_id=env_id, seed=train_seed)
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     env.close()

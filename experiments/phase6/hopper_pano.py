@@ -58,6 +58,7 @@ def get_pretrained_oracle(env_id='Hopper-v4'):
         'Hopper-v4': ('sb3/sac-Hopper-v3', 'sac-Hopper-v3.zip'),
         'Walker2d-v4': ('sb3/sac-Walker2d-v3', 'sac-Walker2d-v3.zip'),
         'HalfCheetah-v4': ('sb3/sac-HalfCheetah-v3', 'sac-HalfCheetah-v3.zip'),
+        'Ant-v4': ('sb3/sac-Ant-v3', 'sac-Ant-v3.zip'),
     }
     
     if env_id not in env_to_hf:
@@ -68,7 +69,10 @@ def get_pretrained_oracle(env_id='Hopper-v4'):
     print(f"Downloading pretrained expert from HuggingFace: {repo_id}")
     checkpoint = load_from_hub(repo_id=repo_id, filename=filename)
     
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     model = SAC.load(checkpoint, env=env)
     print(f"✓ Expert loaded successfully")
     
@@ -215,7 +219,10 @@ def collect_ekf_calibration(
 
 def eval_oracle(sac_model, n_episodes=100, env_id='Hopper-v4', seed=42):
     """Oracle: full observation, no dropout."""
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     rewards = []
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
@@ -411,7 +418,10 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
 
     # --- Train PANO ---
     print("\n[1/5] Training PANO velocity predictor...")
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
     env.close()

@@ -23,7 +23,7 @@ LOG_DIR = Path(__file__).parent / "logs"
 RESULTS_DIR = Path(__file__).parent / "results" / "neurips"
 
 SEEDS = [42, 123, 456, 789, 1024]
-ENVS = ['Hopper-v4', 'Walker2d-v4']
+ENVS = ['Ant-v4']
 N_EPISODES = 50
 
 def run_experiment_script(script_path, args, log_name):

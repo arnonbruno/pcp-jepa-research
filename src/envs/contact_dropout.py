@@ -20,6 +20,7 @@ class ContactDropoutEnv:
         "Hopper-v4": 25.0,
         "Walker2d-v4": 50.0,
         "HalfCheetah-v4": 30.0,
+        "Ant-v4": 40.0,
     }
 
     def __init__(
@@ -30,7 +31,10 @@ class ContactDropoutEnv:
         contact_force_threshold=None,
         warmup_steps=10,
     ):
-        self.env = gym.make(env_id)
+        if env_id == 'Ant-v4':
+            self.env = gym.make(env_id, use_contact_forces=True)
+        else:
+            self.env = gym.make(env_id)
         self.env_id = env_id
         self.dropout_duration = dropout_duration
         self.velocity_threshold = velocity_threshold

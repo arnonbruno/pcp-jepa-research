@@ -51,7 +51,10 @@ def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', d
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     data = {
         'obs': [], 'obs_prev': [], 'action': [],
         'obs_next': [], 'obs_prev_next': [],
@@ -96,7 +99,10 @@ def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
-    env = gym.make(env_id)
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     obs_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
 
