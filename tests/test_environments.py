@@ -60,44 +60,37 @@ class TestContactDetection:
     def test_contact_detection_consistency(self):
         """Test that contact detection is consistent across runs."""
         np.random.seed(42)
-        
-        # Simulate contact detection based on velocity threshold
-        velocity_threshold = 0.1
-        
-        # Generate "state changes"
-        changes = np.random.randn(100, 11) * 0.05
-        
+
+        force_threshold = 25.0
+        contact_forces = np.abs(np.random.randn(100)) * 20.0
+
         contacts_detected = []
-        for i, delta in enumerate(changes):
-            if i > 10:  # Skip warmup
-                is_contact = np.abs(delta).max() > velocity_threshold
-                contacts_detected.append(is_contact)
-        
-        # Reset with same seed
-        np.random.seed(42)
-        changes2 = np.random.randn(100, 11) * 0.05
-        
-        contacts_detected2 = []
-        for i, delta in enumerate(changes2):
+        for i, force in enumerate(contact_forces):
             if i > 10:
-                is_contact = np.abs(delta).max() > velocity_threshold
+                is_contact = force > force_threshold
+                contacts_detected.append(is_contact)
+
+        np.random.seed(42)
+        contact_forces2 = np.abs(np.random.randn(100)) * 20.0
+
+        contacts_detected2 = []
+        for i, force in enumerate(contact_forces2):
+            if i > 10:
+                is_contact = force > force_threshold
                 contacts_detected2.append(is_contact)
-        
-        # Should be identical
+
         assert contacts_detected == contacts_detected2
 
     def test_contact_threshold_sensitivity(self):
         """Test that contact detection is sensitive to threshold."""
         np.random.seed(42)
-        
-        # Create some large state changes
-        changes = np.random.randn(100, 11)
-        changes[50:] *= 0.2  # Make later changes smaller
-        
-        contacts_low_threshold = sum(1 for d in changes[10:] if np.abs(d).max() > 0.1)
-        contacts_high_threshold = sum(1 for d in changes[10:] if np.abs(d).max() > 0.5)
-        
-        # Lower threshold should detect more contacts
+
+        contact_forces = np.abs(np.random.randn(100)) * 50.0
+        contact_forces[50:] *= 0.3
+
+        contacts_low_threshold = sum(1 for force in contact_forces[10:] if force > 10.0)
+        contacts_high_threshold = sum(1 for force in contact_forces[10:] if force > 40.0)
+
         assert contacts_low_threshold >= contacts_high_threshold
 
 
@@ -124,30 +117,24 @@ class TestContactDropoutEnvBehavior:
     def test_dropout_retrigger_protection(self):
         """Test that dropout can't be retriggered during active dropout."""
         dropout_duration = 5
-        velocity_threshold = 0.1
-        
-        # Simulate sequence with potential retrigger
+        force_threshold = 25.0
+
         dropout_countdown = 0
         active_durations = []
-        
+
         for step in range(100):
-            # Simulate state change - large changes every step to test blocking
-            delta = 0.5  # Always large enough to trigger
-            
-            # Contact trigger logic (same as ContactDropoutEnv)
-            if delta > velocity_threshold and step > 10 and dropout_countdown == 0:
+            contact_force = 50.0
+
+            if contact_force > force_threshold and step > 10 and dropout_countdown == 0:
                 dropout_countdown = dropout_duration
-            
+
             if dropout_countdown > 0:
                 active_durations.append(dropout_countdown)
                 dropout_countdown -= 1
-        
-        # Should have multiple dropout periods (since blocking works)
-        # Count transitions from 0 to dropout_duration
+
         transitions = sum(1 for i in range(len(active_durations)-1) 
                         if active_durations[i] == dropout_duration)
-        
-        # Multiple dropout periods means blocking is working
+
         assert transitions >= 1
 
 

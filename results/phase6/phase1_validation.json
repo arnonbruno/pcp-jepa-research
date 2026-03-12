@@ -1,0 +1,1291 @@
+{
+  "phase": "phase1_fundamentals",
+  "seed": 42,
+  "episodes": 6,
+  "max_steps": 250,
+  "dropout_duration": 5,
+  "velocity_threshold_alias": 0.1,
+  "environments": {
+    "Hopper-v4": {
+      "metadata": {
+        "env_id": "Hopper-v4",
+        "dt": 0.008,
+        "contact_force_threshold": 25.0,
+        "contact_source": "data.cfrc_ext",
+        "dropout_duration": 5,
+        "velocity_threshold_alias": 0.1
+      },
+      "contact_detection": {
+        "old_proxy_vs_force_trigger": {
+          "tp": 37,
+          "fp": 47,
+          "fn": 7,
+          "tn": 53,
+          "precision": 0.44047619047619047,
+          "recall": 0.8409090909090909,
+          "f1": 0.5781249999999999,
+          "positive_rate": 0.5833333333333334
+        },
+        "old_proxy_vs_ncon": {
+          "tp": 84,
+          "fp": 0,
+          "fn": 14,
+          "tn": 46,
+          "precision": 1.0,
+          "recall": 0.8571428571428571,
+          "f1": 0.923076923076923,
+          "positive_rate": 0.5833333333333334
+        },
+        "physics_trigger_vs_ncon": {
+          "tp": 44,
+          "fp": 0,
+          "fn": 54,
+          "tn": 46,
+          "precision": 1.0,
+          "recall": 0.4489795918367347,
+          "f1": 0.6197183098591549,
+          "positive_rate": 0.3055555555555556
+        },
+        "force_p50": 7.908303692608554,
+        "force_p95": 95.5146533779644,
+        "ncon_rate": 0.6805555555555556,
+        "physics_trigger_rate": 0.3055555555555556
+      },
+      "ekf": {
+        "legacy": {
+          "dropout_rmse": 0.9458859268669907,
+          "overall_rmse": 0.6604468582687416
+        },
+        "tuned": {
+          "dropout_rmse": 1.724736602103639,
+          "overall_rmse": 1.2042718671827142
+        },
+        "dropout_rmse_improvement_pct": -82.34086723505818,
+        "calibration": {
+          "obs_dim": 11,
+          "dt": 0.008,
+          "env_id": "Hopper-v4",
+          "process_noise": 0.01,
+          "measurement_noise": 0.00981792203547849,
+          "state_scale": [
+            0.015403365734902471,
+            0.0642326306469236,
+            0.05099327793118999,
+            0.07551357006425584,
+            0.07463706355703789,
+            0.28158556585691524,
+            0.2745782080354623,
+            1.3601020901414282,
+            1.3727930467460594,
+            1.1279708726778108,
+            1.5822733899649517
+          ],
+          "velocity_scale": [
+            0.27455319236925335,
+            1.306642883891896,
+            1.3203100214663528,
+            1.0689103065420973,
+            1.5600743899317258,
+            11.97505061338079,
+            10.818903511759112,
+            85.43035130055621,
+            92.30131654202874,
+            98.16835197760676,
+            103.05026556324854
+          ],
+          "position_process_scale": 0.02,
+          "velocity_process_scale": 1.5,
+          "heuristics": {
+            "process_noise_estimate": 76.70251590217573,
+            "measurement_noise_estimate": 0.004908961017739245
+          },
+          "grid_search": [
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0001,
+              "rmse": 2.40429949149855
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0005,
+              "rmse": 2.1126410816543797
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.001,
+              "rmse": 1.9219076821089567
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.002,
+              "rmse": 1.7318642408331772
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 1.6817559265196318
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 1.5421891037356505
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.005,
+              "rmse": 1.5391089535982017
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 1.4435956514643389
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0001,
+              "rmse": 2.4818307986226755
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0005,
+              "rmse": 2.3387779163439455
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.001,
+              "rmse": 2.209696118513191
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.002,
+              "rmse": 2.036058126127683
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 1.978933823087286
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 1.7843306386147173
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.005,
+              "rmse": 1.7794071729071514
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 1.6181123687860322
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.0001,
+              "rmse": 2.509264053497626
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.0005,
+              "rmse": 2.4461642033658126
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.001,
+              "rmse": 2.3785210459467554
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.002,
+              "rmse": 2.269136596934968
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 2.2276726309569175
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 2.058653934163397
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.005,
+              "rmse": 2.053678560113716
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 1.86376351488698
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.0001,
+              "rmse": 2.51958795168904
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.0005,
+              "rmse": 2.4925935767743557
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.001,
+              "rmse": 2.46108642359386
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.002,
+              "rmse": 2.4042994915289047
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 2.3808039429036265
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 2.2726506810398086
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.005,
+              "rmse": 2.269136595751919
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 2.117340818764825
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.0001,
+              "rmse": 2.5237884505372894
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.0005,
+              "rmse": 2.5126776897071816
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.001,
+              "rmse": 2.499183887458774
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.002,
+              "rmse": 2.473411710589699
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 2.4621938942203485
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 2.4062397131562103
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.005,
+              "rmse": 2.404299491432996
+            },
+            {
+              "process_noise": 0.5,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 2.3125976931594145
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.0001,
+              "rmse": 2.526574997588988
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.0005,
+              "rmse": 2.526427304682871
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.001,
+              "rmse": 2.526242760408128
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.002,
+              "rmse": 2.5258739111198323
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 2.5257063816272742
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 2.524802752031106
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.005,
+              "rmse": 2.5247692723368726
+            },
+            {
+              "process_noise": 38.35125795108787,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 2.5230012128675106
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.0001,
+              "rmse": 2.526593462797655
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.0005,
+              "rmse": 2.526519606758922
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.001,
+              "rmse": 2.526427304683377
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.002,
+              "rmse": 2.526242760408634
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 2.5261589150045354
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 2.5257063816277805
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.005,
+              "rmse": 2.5256896059674427
+            },
+            {
+              "process_noise": 76.70251590217573,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 2.524802752031612
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.0001,
+              "rmse": 2.5266026957015857
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.0005,
+              "rmse": 2.5265657652852687
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.001,
+              "rmse": 2.5265196067591336
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.002,
+              "rmse": 2.5264273046835832
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.0024544805088696224,
+              "rmse": 2.5263853617875145
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.004908961017739245,
+              "rmse": 2.5261589150047383
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.005,
+              "rmse": 2.526150518192191
+            },
+            {
+              "process_noise": 153.40503180435147,
+              "measurement_noise": 0.00981792203547849,
+              "rmse": 2.5257063816279777
+            }
+          ],
+          "best_rmse": 1.4435956514643389
+        }
+      }
+    },
+    "Walker2d-v4": {
+      "metadata": {
+        "env_id": "Walker2d-v4",
+        "dt": 0.008,
+        "contact_force_threshold": 50.0,
+        "contact_source": "data.cfrc_ext",
+        "dropout_duration": 5,
+        "velocity_threshold_alias": 0.1
+      },
+      "contact_detection": {
+        "old_proxy_vs_force_trigger": {
+          "tp": 16,
+          "fp": 47,
+          "fn": 16,
+          "tn": 44,
+          "precision": 0.25396825396825395,
+          "recall": 0.5,
+          "f1": 0.3368421052631579,
+          "positive_rate": 0.5121951219512195
+        },
+        "old_proxy_vs_ncon": {
+          "tp": 25,
+          "fp": 38,
+          "fn": 30,
+          "tn": 30,
+          "precision": 0.3968253968253968,
+          "recall": 0.45454545454545453,
+          "f1": 0.423728813559322,
+          "positive_rate": 0.5121951219512195
+        },
+        "physics_trigger_vs_ncon": {
+          "tp": 32,
+          "fp": 0,
+          "fn": 23,
+          "tn": 68,
+          "precision": 1.0,
+          "recall": 0.5818181818181818,
+          "f1": 0.735632183908046,
+          "positive_rate": 0.2601626016260163
+        },
+        "force_p50": 0.0,
+        "force_p95": 120.55524889070986,
+        "ncon_rate": 0.44715447154471544,
+        "physics_trigger_rate": 0.2601626016260163
+      },
+      "ekf": {
+        "legacy": {
+          "dropout_rmse": 3.3597116327008565,
+          "overall_rmse": 1.8402063044926324
+        },
+        "tuned": {
+          "dropout_rmse": 4.220434512441098,
+          "overall_rmse": 2.8956985901517664
+        },
+        "dropout_rmse_improvement_pct": -25.618951083855666,
+        "calibration": {
+          "obs_dim": 17,
+          "dt": 0.008,
+          "env_id": "Walker2d-v4",
+          "process_noise": 0.005,
+          "measurement_noise": 0.24818126102455051,
+          "state_scale": [
+            0.051001183920287144,
+            0.31332582475425735,
+            0.22729559984785488,
+            0.496464885601847,
+            0.32115811024682717,
+            0.24594352333871167,
+            0.3234252797802307,
+            0.4522497938768999,
+            0.5147249439839585,
+            0.9618928203876007,
+            4.2767710223845565,
+            5.88260244341356,
+            5.4209865878531085,
+            6.715754983974832,
+            6.047423352572083,
+            5.545391150102173,
+            7.044661910474051
+          ],
+          "velocity_scale": [
+            0.9156161736126907,
+            5.655599965340126,
+            8.738364128077595,
+            6.189070696903713,
+            9.939769872789071,
+            8.10815339687892,
+            6.758812469572481,
+            10.619851229220378,
+            32.41706443738666,
+            34.360007703253025,
+            373.3520811656809,
+            535.1655402677137,
+            429.78370389374095,
+            759.2729829536256,
+            576.4334210619694,
+            551.3467597245236,
+            581.6329051697345
+          ],
+          "position_process_scale": 0.015,
+          "velocity_process_scale": 1.0,
+          "heuristics": {
+            "process_noise_estimate": 1938.916101754302,
+            "measurement_noise_estimate": 0.12409063051227526
+          },
+          "grid_search": [
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.0001,
+              "rmse": 10.508240229973365
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.0003,
+              "rmse": 10.17180137636979
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.001,
+              "rmse": 9.860754350875231
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.003,
+              "rmse": 9.844573681524777
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.01,
+              "rmse": 9.81615855152235
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 8.487963423920457
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 7.467739966034789
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 6.422827535497326
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0001,
+              "rmse": 10.646041891578383
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0003,
+              "rmse": 10.397969315986446
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.001,
+              "rmse": 10.00787310733799
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.003,
+              "rmse": 9.830396649725541
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.01,
+              "rmse": 9.864810622928006
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 9.255859656582357
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 8.450241567845689
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 7.3895455575535225
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0001,
+              "rmse": 10.759423187272462
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0003,
+              "rmse": 10.64604188967995
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.001,
+              "rmse": 10.365985704315785
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.003,
+              "rmse": 10.007872877309365
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.01,
+              "rmse": 9.828311261540167
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 9.827814100359879
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 9.57112569605398
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 8.947019369341858
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.0001,
+              "rmse": 10.799627885373107
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.0003,
+              "rmse": 10.751688748641351
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.001,
+              "rmse": 10.608440300813902
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.003,
+              "rmse": 10.32886189369278
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.01,
+              "rmse": 9.948106518644915
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 9.858601623467795
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 9.868023795021536
+            },
+            {
+              "process_noise": 0.08,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 9.72648572293245
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.0001,
+              "rmse": 10.814772857396102
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.0003,
+              "rmse": 10.794661791086261
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.001,
+              "rmse": 10.729052618856516
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.003,
+              "rmse": 10.573075564728184
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.01,
+              "rmse": 10.233679270715205
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 9.82917830770011
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 9.84682160295341
+            },
+            {
+              "process_noise": 0.2,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 9.876689925023973
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.0001,
+              "rmse": 10.825080281159494
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.0003,
+              "rmse": 10.825075991247038
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.001,
+              "rmse": 10.82506097679152
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.003,
+              "rmse": 10.825018080387645
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.01,
+              "rmse": 10.824867966773821
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 10.823753024429514
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 10.822426518792417
+            },
+            {
+              "process_noise": 969.458050877151,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 10.819782142065831
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.0001,
+              "rmse": 10.825081353642235
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.0003,
+              "rmse": 10.825079208678451
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.001,
+              "rmse": 10.825071701364733
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.003,
+              "rmse": 10.82505025240711
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.01,
+              "rmse": 10.824975187006407
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 10.824417362427868
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 10.82375302443147
+            },
+            {
+              "process_noise": 1938.916101754302,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 10.822426518796412
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.0001,
+              "rmse": 10.82508188988431
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.0003,
+              "rmse": 10.825080817400531
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.001,
+              "rmse": 10.825077063722178
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.003,
+              "rmse": 10.825066339054436
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.01,
+              "rmse": 10.825028804205205
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.06204531525613763,
+              "rmse": 10.824749803458973
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.12409063051227526,
+              "rmse": 10.824417362428385
+            },
+            {
+              "process_noise": 3877.832203508604,
+              "measurement_noise": 0.24818126102455051,
+              "rmse": 10.82375302443256
+            }
+          ],
+          "best_rmse": 6.422827535497326
+        }
+      }
+    },
+    "HalfCheetah-v4": {
+      "metadata": {
+        "env_id": "HalfCheetah-v4",
+        "dt": 0.05,
+        "contact_force_threshold": 30.0,
+        "contact_source": "data.cfrc_ext",
+        "dropout_duration": 5,
+        "velocity_threshold_alias": 0.1
+      },
+      "contact_detection": {
+        "old_proxy_vs_force_trigger": {
+          "tp": 461,
+          "fp": 979,
+          "fn": 20,
+          "tn": 40,
+          "precision": 0.32013888888888886,
+          "recall": 0.9584199584199584,
+          "f1": 0.47995835502342526,
+          "positive_rate": 0.96
+        },
+        "old_proxy_vs_ncon": {
+          "tp": 719,
+          "fp": 721,
+          "fn": 27,
+          "tn": 33,
+          "precision": 0.49930555555555556,
+          "recall": 0.9638069705093834,
+          "f1": 0.6578225068618482,
+          "positive_rate": 0.96
+        },
+        "physics_trigger_vs_ncon": {
+          "tp": 481,
+          "fp": 0,
+          "fn": 265,
+          "tn": 754,
+          "precision": 1.0,
+          "recall": 0.6447721179624665,
+          "f1": 0.7840260798696006,
+          "positive_rate": 0.32066666666666666
+        },
+        "force_p50": 0.0,
+        "force_p95": 364.04221601635567,
+        "ncon_rate": 0.49733333333333335,
+        "physics_trigger_rate": 0.32066666666666666
+      },
+      "ekf": {
+        "legacy": {
+          "dropout_rmse": 9.972475558204057,
+          "overall_rmse": 7.88810779434241
+        },
+        "tuned": {
+          "dropout_rmse": 4.126845242760926,
+          "overall_rmse": 3.8285318175302927
+        },
+        "dropout_rmse_improvement_pct": 58.617644950095716,
+        "calibration": {
+          "obs_dim": 17,
+          "dt": 0.05,
+          "env_id": "HalfCheetah-v4",
+          "process_noise": 0.0005,
+          "measurement_noise": 4.038201786888763,
+          "state_scale": [
+            0.07052953172318509,
+            0.1333833549762146,
+            0.25671621389643495,
+            0.2757989336423707,
+            0.26684343256648124,
+            0.2989660630776918,
+            0.29736759597112056,
+            0.2737624243238586,
+            0.765793989832764,
+            0.7959165003774175,
+            1.594924361896876,
+            5.615897982865732,
+            7.211814527015833,
+            6.803498523362737,
+            6.263329313634737,
+            6.6645594623163005,
+            5.913366130287808
+          ],
+          "velocity_scale": [
+            0.7111842910481382,
+            1.4022799651004842,
+            4.713984978978907,
+            6.054201844738811,
+            5.706440138081381,
+            5.164294962809701,
+            5.522752149131206,
+            5.050475452091853,
+            17.64574862570592,
+            18.055854304731174,
+            39.415863169958854,
+            168.20822676275532,
+            232.84151270656037,
+            213.72388516681906,
+            182.02797340062313,
+            204.78810477335585,
+            165.5251776058961
+          ],
+          "position_process_scale": 0.008,
+          "velocity_process_scale": 0.4,
+          "heuristics": {
+            "process_noise_estimate": 807.6403573777534,
+            "measurement_noise_estimate": 2.0191008934443815
+          },
+          "grid_search": [
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 1e-05,
+              "rmse": 32.42849112912663
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 5e-05,
+              "rmse": 27.123374890064117
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 0.0001,
+              "rmse": 23.81702281512747
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 0.0003,
+              "rmse": 18.42924428668566
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 0.001,
+              "rmse": 13.47610666625217
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 4.4359842050117235
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 4.300236351033273
+            },
+            {
+              "process_noise": 0.0005,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 4.201664097161722
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 1e-05,
+              "rmse": 33.52222135697946
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 5e-05,
+              "rmse": 29.90985599813672
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 0.0001,
+              "rmse": 27.12337488782573
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 0.0003,
+              "rmse": 21.794541446165713
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 0.001,
+              "rmse": 16.153596507245034
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 4.620899012516682
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 4.435393452890179
+            },
+            {
+              "process_noise": 0.001,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 4.299694022512412
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 1e-05,
+              "rmse": 34.534163360733594
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 5e-05,
+              "rmse": 33.52222135697676
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.0001,
+              "rmse": 32.42849112914026
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.0003,
+              "rmse": 29.245116434915342
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 0.001,
+              "rmse": 23.81702312796897
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 5.342178475104831
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 4.9671037053686495
+            },
+            {
+              "process_noise": 0.005,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 4.692613220217993
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 1e-05,
+              "rmse": 34.67099876414164
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 5e-05,
+              "rmse": 34.13818317960141
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0001,
+              "rmse": 33.52222135697529
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.0003,
+              "rmse": 31.481745347692755
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 0.001,
+              "rmse": 27.12337491452387
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 5.862103551505939
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 5.341364175118019
+            },
+            {
+              "process_noise": 0.01,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 4.966723100730346
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 1e-05,
+              "rmse": 34.76363875097159
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 5e-05,
+              "rmse": 34.57949613494568
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0001,
+              "rmse": 34.35555091246396
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.0003,
+              "rmse": 33.52222135697205
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 0.001,
+              "rmse": 31.192956823939895
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 7.090371948526531
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 6.25235364050845
+            },
+            {
+              "process_noise": 0.03,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 5.624246389330547
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 1e-05,
+              "rmse": 34.8103899439677
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 5e-05,
+              "rmse": 34.81037600672163
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 0.0001,
+              "rmse": 34.81035858520056
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 0.0003,
+              "rmse": 34.81028889952242
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 0.001,
+              "rmse": 34.810045004764284
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 34.46667865256996
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 34.13818317960223
+            },
+            {
+              "process_noise": 403.8201786888767,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 33.52222135692271
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 1e-05,
+              "rmse": 34.810391686125264
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 5e-05,
+              "rmse": 34.810384717497364
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 0.0001,
+              "rmse": 34.81037600672163
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 0.0003,
+              "rmse": 34.81034116372013
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 0.001,
+              "rmse": 34.8102192144938
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 34.63655337676826
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 34.466678652569975
+            },
+            {
+              "process_noise": 807.6403573777534,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 34.13818317960257
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 1e-05,
+              "rmse": 34.810392557204224
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 5e-05,
+              "rmse": 34.810389072889045
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 0.0001,
+              "rmse": 34.810384717497364
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 0.0003,
+              "rmse": 34.81036729595601
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 0.001,
+              "rmse": 34.81030632088104
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 1.0095504467221907,
+              "rmse": 34.72296714542465
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 2.0191008934443815,
+              "rmse": 34.63655337676826
+            },
+            {
+              "process_noise": 1615.2807147555068,
+              "measurement_noise": 4.038201786888763,
+              "rmse": 34.46667865256999
+            }
+          ],
+          "best_rmse": 4.201664097161722
+        }
+      }
+    }
+  }
+}

@@ -84,3 +84,44 @@ def test_ekf_estimator():
     
     est_obs_new = ekf.get_obs_estimate()
     assert est_obs_new.shape == (obs_dim,)
+
+
+def test_ekf_environment_noise_priors_are_distinct():
+    hopper = EKFEstimator(obs_dim=3, dt=0.01, env_id='Hopper-v4')
+    walker = EKFEstimator(obs_dim=3, dt=0.01, env_id='Walker2d-v4')
+    cheetah = EKFEstimator(obs_dim=3, dt=0.01, env_id='HalfCheetah-v4')
+
+    assert not np.allclose(np.diag(hopper.Q), np.diag(walker.Q))
+    assert not np.allclose(np.diag(hopper.Q), np.diag(cheetah.Q))
+    assert not np.allclose(np.diag(hopper.R), np.diag(cheetah.R))
+
+
+def test_ekf_auto_calibration_from_trajectory_data():
+    dt = 0.05
+    t = np.arange(0, 4.0, dt)
+    traj = np.stack(
+        [
+            np.sin(t),
+            np.cos(0.5 * t),
+            0.25 * t,
+        ],
+        axis=1,
+    )
+    dropout_mask = np.zeros(len(traj), dtype=bool)
+    dropout_mask[10:15] = True
+    dropout_mask[30:35] = True
+
+    calibration = EKFEstimator.auto_calibrate(
+        [traj],
+        dt=dt,
+        env_id='HalfCheetah-v4',
+        dropout_masks=[dropout_mask],
+    )
+    ekf = EKFEstimator.from_calibration(calibration)
+    estimates = ekf.filter_sequence(traj, measurement_mask=~dropout_mask)
+
+    assert calibration['process_noise'] > 0.0
+    assert calibration['measurement_noise'] > 0.0
+    assert calibration['best_rmse'] >= 0.0
+    assert estimates.shape == traj.shape
+    assert np.isfinite(estimates).all()

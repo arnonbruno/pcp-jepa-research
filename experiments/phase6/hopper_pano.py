@@ -133,6 +133,68 @@ def train_oracle(model_path='hopper_sac.zip', total_timesteps=1_000_000, seed=42
 # EVALUATION METHODS
 # =============================================================================
 
+
+def collect_ekf_calibration(
+    sac_model,
+    env_id='Hopper-v4',
+    seed=42,
+    n_episodes=4,
+    max_steps=300,
+    dropout_duration=5,
+    velocity_threshold=0.1,
+):
+    """
+    Collect true-state trajectories and contact-driven dropout masks for EKF tuning.
+
+    We step the physics wrapper so the dropout mask comes from the same real-contact
+    logic used during evaluation, but actions are selected from the true observation
+    stream to avoid contaminating the calibration trajectories with frozen inputs.
+    """
+    env = ContactDropoutEnv(env_id, dropout_duration, velocity_threshold)
+    trajectories = []
+    dropout_masks = []
+    all_contact_forces = []
+
+    for ep in range(n_episodes):
+        policy_obs, _ = env.reset(seed=seed + ep)
+        traj = [policy_obs.copy()]
+        dropout_mask = [False]
+
+        for _ in range(max_steps):
+            action, _ = sac_model.predict(policy_obs, deterministic=True)
+            _, _, term, trunc, info = env.step(action)
+            true_obs = info['true_obs'].copy()
+
+            traj.append(true_obs)
+            dropout_mask.append(bool(info['dropout_active']))
+            all_contact_forces.append(float(info.get('contact_force_max', 0.0)))
+
+            policy_obs = true_obs
+            if term or trunc:
+                break
+
+        if len(traj) > 2:
+            trajectories.append(np.asarray(traj))
+            dropout_masks.append(np.asarray(dropout_mask, dtype=bool))
+
+    calibration = EKFEstimator.auto_calibrate(
+        trajectories,
+        dt=env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002,
+        env_id=env_id,
+        dropout_masks=dropout_masks,
+    )
+    calibration['calibration_episodes'] = len(trajectories)
+    calibration['dropout_fraction'] = float(
+        np.mean(np.concatenate(dropout_masks)) if dropout_masks else 0.0
+    )
+    calibration['contact_force_threshold'] = float(env.contact_force_threshold)
+    calibration['contact_source'] = getattr(env, '_contact_source', None)
+    calibration['contact_force_p95'] = float(
+        np.percentile(all_contact_forces, 95) if all_contact_forces else 0.0
+    )
+    env.close()
+    return calibration
+
 def eval_oracle(sac_model, n_episodes=100, env_id='Hopper-v4', seed=42):
     """Oracle: full observation, no dropout."""
     env = gym.make(env_id)
@@ -172,9 +234,12 @@ def eval_frozen_baseline(sac_model, n_episodes=100, dropout_duration=5,
                 break
         rewards.append(total_reward)
 
+    result = summarize_results('Frozen Baseline (dropout)', np.array(rewards),
+                               np.array(vel_errors) if vel_errors else None)
+    result['contact_force_threshold'] = float(env.contact_force_threshold)
+    result['contact_source'] = getattr(env, '_contact_source', None)
     env.close()
-    return summarize_results('Frozen Baseline (dropout)', np.array(rewards),
-                              np.array(vel_errors) if vel_errors else None)
+    return result
 
 
 def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
@@ -184,10 +249,26 @@ def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
     obs_dim = env.observation_space.shape[0]
     dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
     rewards, vel_errors = [], []
+    calibration = collect_ekf_calibration(
+        sac_model,
+        env_id=env_id,
+        seed=seed + 10_000,
+        dropout_duration=dropout_duration,
+        velocity_threshold=velocity_threshold,
+    )
+    print(
+        "  EKF calibration:"
+        f" Q={calibration['process_noise']:.5f},"
+        f" R={calibration['measurement_noise']:.5f},"
+        f" dropout_rmse={calibration['best_rmse']:.4f},"
+        f" contact_threshold={calibration['contact_force_threshold']:.1f}"
+    )
 
     for ep in range(n_episodes):
         obs, _ = env.reset(seed=seed + ep)
-        ekf = EKFEstimator(obs_dim=obs_dim, dt=dt)
+        ekf = EKFEstimator.from_calibration(
+            calibration, obs_dim=obs_dim, dt=dt, env_id=env_id
+        )
         ekf.reset(obs)
         total_reward = 0.0
 
@@ -210,9 +291,13 @@ def eval_ekf(sac_model, n_episodes=100, dropout_duration=5,
                 break
         rewards.append(total_reward)
 
+    result = summarize_results('EKF Baseline (dropout)', np.array(rewards),
+                               np.array(vel_errors) if vel_errors else None)
+    result['tuning'] = calibration
+    result['contact_force_threshold'] = float(env.contact_force_threshold)
+    result['contact_source'] = getattr(env, '_contact_source', None)
     env.close()
-    return summarize_results('EKF Baseline (dropout)', np.array(rewards),
-                              np.array(vel_errors) if vel_errors else None)
+    return result
 
 
 def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
@@ -259,9 +344,12 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
                 break
         rewards.append(total_reward)
 
+    result = summarize_results('PANO (dropout)', np.array(rewards),
+                               np.array(vel_errors) if vel_errors else None)
+    result['contact_force_threshold'] = float(env.contact_force_threshold)
+    result['contact_source'] = getattr(env, '_contact_source', None)
     env.close()
-    return summarize_results('PANO (dropout)', np.array(rewards),
-                              np.array(vel_errors) if vel_errors else None)
+    return result
 
 # =============================================================================
 # MAIN

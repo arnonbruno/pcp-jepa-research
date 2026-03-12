@@ -1,0 +1,104 @@
+{
+  "experiment": "sota_baselines",
+  "env_id": "Hopper-v4",
+  "n_episodes": 2,
+  "dropout_duration": 5,
+  "methods": {
+    "oracle": {
+      "method": "Oracle (no dropout)",
+      "n_episodes": 2,
+      "reward_mean": 1121.2971362980397,
+      "reward_std": 9.341130823770216,
+      "reward_median": 1121.2971362980397,
+      "reward_ci_95_lower": 1114.6919593486011,
+      "reward_ci_95_upper": 1127.9023132474783,
+      "reward_min": 1114.6919593486011,
+      "reward_max": 1127.9023132474783,
+      "rewards_raw": [
+        1114.6919593486011,
+        1127.9023132474783
+      ]
+    },
+    "frozen": {
+      "method": "Frozen Baseline",
+      "n_episodes": 2,
+      "reward_mean": 906.2807706752485,
+      "reward_std": 346.67198363533566,
+      "reward_median": 906.2807706752485,
+      "reward_ci_95_lower": 661.1466601993108,
+      "reward_ci_95_upper": 1151.4148811511861,
+      "reward_min": 661.1466601993108,
+      "reward_max": 1151.4148811511861,
+      "rewards_raw": [
+        661.1466601993108,
+        1151.4148811511861
+      ],
+      "velocity_error_mean": 0.6008218331274274,
+      "velocity_error_std": 0.516883749192086
+    },
+    "dreamerv3": {
+      "method": "DreamerV3 (RSSM)",
+      "n_episodes": 2,
+      "reward_mean": 78.66487549283919,
+      "reward_std": 20.902115363271623,
+      "reward_median": 78.66487549283919,
+      "reward_ci_95_lower": 63.884847978326306,
+      "reward_ci_95_upper": 93.44490300735207,
+      "reward_min": 63.884847978326306,
+      "reward_max": 93.44490300735207,
+      "rewards_raw": [
+        63.884847978326306,
+        93.44490300735207
+      ],
+      "velocity_error_mean": 1.008825298483143,
+      "velocity_error_std": 0.3642686931414962
+    },
+    "tdmpc2": {
+      "method": "TD-MPC2 (TOLD)",
+      "n_episodes": 2,
+      "reward_mean": 59.38675208584026,
+      "reward_std": 25.66996739923765,
+      "reward_median": 59.38675208584026,
+      "reward_ci_95_lower": 41.23534406500171,
+      "reward_ci_95_upper": 77.5381601066788,
+      "reward_min": 41.23534406500171,
+      "reward_max": 77.5381601066788,
+      "rewards_raw": [
+        77.5381601066788,
+        41.23534406500171
+      ],
+      "velocity_error_mean": 1.2269089979896612,
+      "velocity_error_std": 0.40735231218448387
+    }
+  },
+  "comparisons": {
+    "dreamerv3_vs_frozen": {
+      "label": "DreamerV3 vs Frozen",
+      "method_a": "DreamerV3 (RSSM)",
+      "method_b": "Frozen Baseline",
+      "mean_a": 78.66487549283919,
+      "mean_b": 906.2807706752485,
+      "improvement_absolute": -827.6158951824093,
+      "improvement_pct": -91.32003259495092,
+      "t_statistic": -3.3700559143912687,
+      "p_value": 0.18220016889255158,
+      "cohens_d": -3.3700559143912687,
+      "significant_005": false,
+      "significant_001": false
+    },
+    "tdmpc2_vs_frozen": {
+      "label": "TD-MPC2 vs Frozen",
+      "method_a": "TD-MPC2 (TOLD)",
+      "method_b": "Frozen Baseline",
+      "mean_a": 59.38675208584026,
+      "mean_b": 906.2807706752485,
+      "improvement_absolute": -846.8940185894082,
+      "improvement_pct": -93.44720157290851,
+      "t_statistic": -3.4453866428227697,
+      "p_value": 0.17768069214670693,
+      "cohens_d": -3.4453866428227697,
+      "significant_005": false,
+      "significant_001": false
+    }
+  }
+}
