@@ -158,3 +158,92 @@ def train_pano(model, data, n_epochs=100, lr=1e-3, batch_size=256, device='cuda'
             print(f"  PANO training epoch {epoch+1}/{n_epochs}: loss={total_loss/n_batches:.4f}")
 
     return model
+
+
+def train_event_consistent_jepa(
+    model,
+    data,
+    dt,
+    n_epochs=100,
+    lambda_vel=10.0,
+    lambda_pred=0.1,
+    lambda_event=1.0,
+    lambda_impulse=1.0,
+    lambda_complementarity=0.1,
+    device='cuda',
+    return_model=False,
+):
+    """
+    Train EventConsistentJEPA with MuJoCo contact supervision.
+    """
+    if isinstance(device, str):
+        device = torch.device(device if torch.cuda.is_available() else 'cpu')
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    batch_size = 256
+    n_samples = len(data['obs'])
+
+    for epoch in range(n_epochs):
+        idx = torch.randperm(n_samples, device=device)
+        total_loss = 0.0
+        total_event = 0.0
+        total_impulse = 0.0
+        total_complementarity = 0.0
+
+        for i in range(0, n_samples, batch_size):
+            b = idx[i:i + batch_size]
+
+            z_t = model.encode(data['obs'][b], data['obs_prev'][b], dt)
+            z_target = model.encode_target(data['obs_next'][b], data['obs_prev_next'][b], dt)
+            z_pred, aux = model.forward_latent(z_t, data['action'][b], return_aux=True)
+
+            v_pred = model.decode_velocity(z_t)
+            v_true = (data['obs'][b] - data['obs_prev'][b]) / dt
+
+            loss_vel = F.mse_loss(v_pred, v_true)
+            loss_pred = F.mse_loss(z_pred, z_target.detach())
+            loss_event = model.event_supervision_loss(aux['event_logits'], data['contact'][b])
+            loss_impulse = model.contact_impulse_loss(
+                aux['contact_impulse'], data['contact_impulse'][b]
+            )
+            loss_complementarity = model.contact_constraint_loss(
+                aux['contact_impulse'],
+                data['contact_distance'][b],
+                data['contact'][b],
+            )
+
+            loss = (
+                lambda_vel * loss_vel
+                + lambda_pred * loss_pred
+                + lambda_event * loss_event
+                + lambda_impulse * loss_impulse
+                + lambda_complementarity * loss_complementarity
+            )
+
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            optimizer.step()
+            model.update_target()
+
+            total_loss += loss.item()
+            total_event += loss_event.item()
+            total_impulse += loss_impulse.item()
+            total_complementarity += loss_complementarity.item()
+
+        if return_model and (epoch + 1) % 20 == 0:
+            print(
+                f"Epoch {epoch+1}: loss={total_loss:.1f} "
+                f"(event={total_event:.2f}, impulse={total_impulse:.2f}, "
+                f"comp={total_complementarity:.2f})"
+            )
+
+    if return_model:
+        return model
+
+    return {
+        'event_loss': total_event,
+        'impulse_loss': total_impulse,
+        'complementarity_loss': total_complementarity,
+        'total_loss': total_loss,
+    }

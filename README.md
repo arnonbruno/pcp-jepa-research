@@ -4,9 +4,9 @@ Physics-Informed World Models for Continuous Control
 
 ## Abstract
 
-Standard Latent JEPA architectures fail catastrophically when predicting across sensor dropout windows in high-dimensional continuous control. We show that this failure **persists in environments driven by discontinuous impacts (Hopper, Walker2d), whereas the architecture successfully bridges dropouts in smooth, continuous environments (HalfCheetah)**. This isolates the failure specifically to hybrid contact boundaries.
+This repository currently supports a **negative-results paper** about latent-rollout failure under contact-triggered sensor dropout in continuous control. The strongest reproducible claim in the checked-in artifacts is that **standard latent JEPA exhibits severe multistep drift in MuJoCo control**, and that a simple observation-space baseline, **PANO** (Physics-Anchored Neural Observer), provides a **modest but not statistically significant +83.1%** improvement over a frozen-observation baseline on Hopper-v4 (`p = 0.568` on 2 evaluation episodes).
 
-To address this, we propose **PANO** (Physics-Anchored Neural Observer), which bypasses latent rollout entirely through direct velocity prediction. On MuJoCo Hopper under contact-triggered sensor dropout, PANO recovers **+215.4%** of lost performance versus frozen baseline (p < 0.0001), while Extended Kalman Filters collapse entirely (-90.4%, p < 0.0001).
+The repository does **not** currently support stronger method-paper claims such as a validated event-consistent JEPA, a canonical hybrid-specific theorem, or official DreamerV3 / TD-MPC2 baseline comparisons. Those remain future work.
 
 ## Repository Structure
 
@@ -56,12 +56,12 @@ Using pretrained SAC experts from RL Baselines3 Zoo (HuggingFace):
 
 | Method | Reward (Mean ± Std) | 95% CI | Improvement | p-value vs Frozen |
 |:-------|:-------------------|:-------|:-----------|:------------------|
-| Oracle (no dropout) | 1116.5 ± 69.9 | [1105.5, 1131.7] | upper bound | — |
-| Frozen Baseline | 380.1 ± 251.6 | [331.6, 431.1] | baseline | — |
-| EKF Baseline | 36.3 ± 14.3 | [33.5, 39.1] | **-90.4%** (shattered) | p < 0.0001 |
-| **PANO** | **1198.9 ± 624.2** | **[1085.3, 1329.6]** | **+215.4%** | **p < 0.0001** |
+| Oracle (no dropout) | 1121.3 ± 9.3 | [1114.7, 1127.9] | upper bound | — |
+| Frozen Baseline | 175.5 ± 58.4 | [134.3, 216.8] | baseline | — |
+| EKF Baseline | 30.5 ± 16.2 | [19.1, 42.0] | **-82.6%** | 0.156 |
+| **PANO** | **321.3 ± 257.7** | **[139.1, 503.5]** | **+83.1%** | **0.568** |
 
-**Key Finding:** PANO not only recovers performance but slightly *exceeds* the oracle mean, demonstrating that learned velocity estimation can compensate for dropout-induced information loss. EKF catastrophically fails, confirming that physics-based state estimation alone is insufficient for hybrid dynamics.
+**Key Finding:** PANO improves over the frozen baseline on average in limited testing, but remains far below the oracle. It should be read as a constructive observation-space baseline, not a solved method for hybrid control under dropout.
 
 ---
 
@@ -75,7 +75,7 @@ We tested Standard Latent JEPA on three MuJoCo environments with fundamentally d
 | Walker2d-v4 | Bipedal impacts | 3782.8 | 222.2 | 175.8 | 0.369 | JEPA matches baseline |
 | HalfCheetah-v4 | Smooth rolling contacts | 9408.7 | **586.5** | 207.2 | **p < 0.0001** | JEPA **SUCCEEDS** |
 
-**Critical Discovery:** The survival of latent rollout on HalfCheetah proves that **high dimensionality alone does not break the JEPA architecture**. Instead, it is the **discontinuous physics of hybrid contact boundaries** that shatter the unconstrained latent space.
+**Interpretation:** The environment-specific picture is mixed: Hopper clearly fails, Walker2d is inconclusive, and HalfCheetah improves over baseline. The current codebase therefore supports the conservative claim that latent rollout is brittle under dropout in contact-rich control, but does **not** yet prove a strict hybrid-only failure law.
 
 ---
 
@@ -91,7 +91,7 @@ Prediction error grows exponentially regardless of physics phase:
 | 4 | 577.6 | 1.6× |
 | 5 | 831.8 | 1.4× |
 
-**Finding:** Error compounds at ~1.5× per step. By step 10, error reaches ~1.09 trillion — complete numerical collapse.
+**Finding:** Error compounds at roughly 1.5× per step in the checked-in profile, reaching 2898.4 by step 10. The qualitative result is runaway multistep drift, even if the exact magnitude depends on the current profiling setup.
 
 ---
 
@@ -109,13 +109,15 @@ Prediction error grows exponentially regardless of physics phase:
 
 ## Key Contributions
 
-1. **Hybrid-Specific Failure Characterization:** Standard Latent JEPA rollouts fail specifically on hybrid/contact-rich environments (Hopper, Walker2d) but succeed on smooth continuous systems (HalfCheetah). This isolates the failure to discontinuous contact physics, not dimensionality.
+1. **Failure Characterization:** Standard Latent JEPA rollouts are brittle under contact-triggered sensor dropout in MuJoCo control. The current multi-environment evidence is mixed, with clear failure on Hopper, inconclusive Walker2d results, and better HalfCheetah behavior.
 
-2. **Physics-Anchored Solution:** PANO bypasses latent rollout entirely, using direct velocity prediction + Euler integration, achieving **+215.4%** improvement over frozen baseline with high statistical significance (p < 0.0001).
+2. **Constructive Baseline:** PANO bypasses latent rollout entirely, using direct velocity prediction + Euler integration, achieving **+83.1%** improvement over frozen baseline on Hopper-v4 in the checked-in final report.
 
-3. **EKF Collapse:** Extended Kalman Filter catastrophically fails (-90.4%), demonstrating that naive physics-based state estimation cannot handle hybrid contact boundaries.
+3. **EKF Collapse:** Extended Kalman Filter catastrophically fails (-82.6%), demonstrating that naive state estimation alone is insufficient in this setting.
 
-4. **Architectural Limit:** Data scaling reduces but does not eliminate the prediction-velocity gap (185× → 76×), proving the JEPA latent rollout is fundamentally unsuited for multi-step prediction in hybrid systems.
+4. **Architectural Limit:** Data scaling reduces but does not eliminate the prediction-velocity gap (185× → 76×), indicating that the standard JEPA latent rollout remains poorly aligned with multi-step prediction under dropout.
+
+5. **Scope Note:** `experiments/phase6/sota_baselines.py` contains simplified RSSM/TOLD stress tests, not official DreamerV3 or TD-MPC2 reproductions.
 
 ---
 

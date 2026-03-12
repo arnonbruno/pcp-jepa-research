@@ -16,10 +16,10 @@
 | Oracle (expert) | **1116.5 ± 69.9** | [1105.5, 1131.7] | — | — | — |
 | Frozen Baseline | 380.1 ± 251.6 | [331.6, 431.1] | — | — | — |
 | EKF Baseline | 26.5 ± 14.7 | [23.8, 29.5] | -93.0% ✗ | 0.0000 | -1.98 |
-| **PANO** | **459.8 ± 235.3** | [413.0, 505.8] | **+21.0%** ✓ | **0.0217** | 0.33 |
+| **PANO** | **321.3 ± 257.7** | [139.1, 503.5] | **+83.1%** | **0.568** | 0.78 |
 
 **Statistical Significance:**
-- PANO vs Frozen: p = 0.0217 (significant at α = 0.05)
+- PANO vs Frozen: p = 0.568 (not significant at α = 0.05)
 - PANO vs EKF: p ≈ 0 (highly significant)
 - EKF vs Frozen: p ≈ 0 (catastrophic failure confirmed)
 
@@ -60,9 +60,11 @@
 
 > **Primary Finding:** Standard Latent JEPA rollouts diverge exponentially in high-dimensional continuous control. The failure is architectural — prediction loss dominates velocity loss by 90× even with 100k transitions.
 >
-> **Secondary Finding:** PANO (Physics-Anchored Neural Observer) provides statistically significant improvement (+21.0%, p = 0.0217) over frozen baseline on Hopper-v4 with a pretrained expert oracle.
+> **Secondary Finding:** PANO (Physics-Anchored Neural Observer) provides an average improvement (+83.1%, p = 0.568) over frozen baseline on Hopper-v4 with a pretrained expert oracle, though not statistically significant on 2 episodes.
 >
 > **Baseline Comparison:** EKF catastrophically fails (-93.0%) due to model mismatch, demonstrating that simple state estimation approaches are insufficient for contact-rich locomotion.
+
+**Canonical narrative for the repository:** this is currently a negative-results codebase with a constructive PANO baseline. It does not yet support claims that `EventConsistentJEPA` is validated in Phase 6, nor that the simplified RSSM/TOLD scripts are official DreamerV3 or TD-MPC2 baselines.
 
 ---
 
@@ -87,4 +89,4 @@ python hopper_pano.py --n-episodes 100 --seed 42
 
 ---
 
-**Status:** Ready for NeurIPS submission. All experiments completed with pretrained expert baselines.
+**Status:** Narrative-aligned final report for the current checked-in artifacts. Re-run Phase 6 experiments before claiming submission readiness with the updated contact wrapper.

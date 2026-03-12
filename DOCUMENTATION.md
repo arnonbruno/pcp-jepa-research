@@ -2,12 +2,12 @@
 
 ## Overview
 
-This repository contains an empirical investigation into JEPA (Joint-Embedding Predictive Architecture) failure modes in hybrid continuous control. The primary finding is **negative**: standard latent JEPA rollout diverges exponentially in high-dimensional systems under partial observability. As a constructive baseline, PANO (Physics-Anchored Neural Observer) recovers partial task performance via observation-space velocity estimation.
+This repository contains an empirical investigation into JEPA (Joint-Embedding Predictive Architecture) failure modes in continuous control under contact-triggered partial observability. The primary finding is **negative**: standard latent JEPA rollout diverges under multi-step prediction. As a constructive baseline, PANO (Physics-Anchored Neural Observer) recovers partial Hopper task performance via observation-space velocity estimation.
 
 ### Two-Line Summary
 
-1. **Standard Latent JEPA rollout fails** — prediction error grows exponentially with rollout steps across all tested environments.
-2. **PANO (velocity prediction + Euler integration) recovers partial performance** — by staying in observation space, it avoids latent drift.
+1. **Standard Latent JEPA rollout fails** — prediction error grows rapidly with rollout steps and the method is brittle under dropout.
+2. **PANO (velocity prediction + Euler integration) recovers partial performance** — the checked-in final report gives a +83.1% improvement over frozen baseline on Hopper-v4.
 
 ---
 
@@ -128,11 +128,11 @@ Three converging experiments validating the negative result:
 2. **Multi-Environment Ablation** — Standard Latent JEPA fails on:
    - Hopper-v4 (hybrid contact)
    - Walker2d-v4 (bipedal)
-   - HalfCheetah-v4 (contact-rich)
-   - InvertedDoublePendulum-v4 (smooth, NO hybrid dynamics)
-   Failure on smooth systems proves this is NOT hybrid-specific.
+   - HalfCheetah-v4 (smooth locomotion with different contact profile)
 
-3. **Impact Horizon Profiling** — Latent prediction error grows exponentially with rollout steps, in both air and contact phases.
+   The current result table is mixed, so the repository does not support a strict hybrid-only or universal-across-all-envs claim. It supports a more conservative statement: latent rollout is brittle, especially on Hopper, and the failure mode is environment dependent.
+
+3. **Impact Horizon Profiling** — Latent prediction error grows rapidly with rollout steps; the current implementation should be read as a multistep-drift probe rather than a finalized phase-separated analysis.
 
 ---
 
@@ -178,14 +178,15 @@ Without stop-gradient, the representation collapses.
 ### Contact-Triggered Dropout
 
 ```python
-# Detect large state changes (contact proxy)
-delta = |obs - obs_prev|.max()
-if delta > threshold:
+# Prefer true MuJoCo contact semantics when available.
+contact_pairs = data.contact[:data.ncon]
+normal_force = mj_contactForce(model, data, idx)
+if data.ncon > 0 and normal_force > 0:
     dropout_countdown = dropout_duration
     frozen_obs = obs
 ```
 
-The velocity threshold (0.1) is a proxy for contact events, not true contact detection.
+The wrapper now prefers MuJoCo contact semantics (`mj_contactForce`, `data.contact`, and `cfrc_ext`) and only falls back to observation deltas when those APIs are unavailable.
 
 ---
 
@@ -236,8 +237,8 @@ pip install torch gymnasium[mujoco] stable-baselines3 scipy matplotlib seaborn t
 
 1. **Single-policy evaluation:** All Hopper experiments use one SAC oracle. Different policies may have different dropout sensitivity.
 2. **PANO constant velocity assumption:** Euler integration breaks down for long dropout windows (>10 steps).
-3. **Contact detection is approximate:** The velocity-threshold trigger is a proxy, not ground-truth contact detection.
-4. **No Dreamer/TDMPC comparison:** A proper model-based RL baseline would strengthen the paper.
+3. **Contact detection fallback exists:** non-MuJoCo environments still fall back to an observation-delta proxy when physics contact APIs are unavailable.
+4. **No official DreamerV3 / TD-MPC2 comparison:** `experiments/phase6/sota_baselines.py` contains simplified internal stress tests, not drop-in reproductions of those papers.
 5. **Training variance:** F3-JEPA on bouncing ball still shows ±9.2% std across seeds.
 
 ---
@@ -249,7 +250,7 @@ The `archive_phase1_to_4/` directory contains early JAX/Flax experiments and sca
 - O1/O2/O3 loss experiments (`o1_event_consistency.py`, etc.)
 - Phase 1–4 experimental scripts
 
-These were archived to avoid confusion between the ambitions of the research plan (event-consistency, horizon-consistency, event-localized uncertainty losses) and the actual empirical results (which focus on the negative finding and PANO baseline).
+These were archived to avoid confusion between the ambitions of the research plan (event-consistency, horizon-consistency, event-localized uncertainty losses) and the actual empirical results (which focus on the negative finding and PANO baseline). `EventConsistentJEPA` remains experimental code until it is fully integrated and evaluated in Phase 6.
 
 ---
 

@@ -72,7 +72,7 @@ def get_pretrained_oracle(env_id='Hopper-v4'):
     print(f"✓ Expert loaded successfully")
     
     # Quick test
-    obs, _ = env.reset()
+    obs, _ = env.reset(seed=42)
     total_reward = 0
     for _ in range(1000):
         action, _ = model.predict(obs, deterministic=True)

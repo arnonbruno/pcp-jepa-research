@@ -1,6 +1,11 @@
 import numpy as np
 import gymnasium as gym
 
+try:
+    import mujoco
+except ImportError:  # pragma: no cover - optional dependency at test time
+    mujoco = None
+
 
 class ContactDropoutEnv:
     """
@@ -52,6 +57,17 @@ class ContactDropoutEnv:
         return base_threshold * relative_sensitivity
 
     def _detect_contact_source(self):
+        model, data = self._get_model_and_data()
+        if (
+            mujoco is not None
+            and model is not None
+            and data is not None
+            and hasattr(data, "contact")
+            and hasattr(data, "ncon")
+            and hasattr(mujoco, "mj_contactForce")
+        ):
+            return "mujoco.mj_contactForce"
+
         unwrapped = self.env.unwrapped
         if hasattr(unwrapped, "sim") and hasattr(unwrapped.sim, "data"):
             data = unwrapped.sim.data
@@ -61,23 +77,171 @@ class ContactDropoutEnv:
             return "data.cfrc_ext"
         return None
 
-    def _extract_contact_forces(self):
+    def _get_model_and_data(self):
         unwrapped = self.env.unwrapped
-        data = None
-        if hasattr(unwrapped, "sim") and hasattr(unwrapped.sim, "data"):
-            data = unwrapped.sim.data
-        elif hasattr(unwrapped, "data"):
-            data = unwrapped.data
 
-        if data is None or not hasattr(data, "cfrc_ext"):
+        model = getattr(unwrapped, "model", None)
+        data = getattr(unwrapped, "data", None)
+
+        if hasattr(unwrapped, "sim"):
+            if model is None:
+                model = getattr(unwrapped.sim, "model", None)
+            if data is None:
+                data = getattr(unwrapped.sim, "data", None)
+
+        return model, data
+
+    def _geom_name(self, model, geom_id):
+        if model is None or geom_id is None or int(geom_id) < 0:
+            return None
+
+        geom_id = int(geom_id)
+        if hasattr(model, "geom_id2name"):
+            try:
+                return model.geom_id2name(geom_id)
+            except Exception:
+                return None
+
+        if mujoco is not None and hasattr(mujoco, "mj_id2name") and hasattr(mujoco, "mjtObj"):
+            try:
+                return mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id)
+            except Exception:
+                return None
+
+        return None
+
+    def _body_id_from_geom(self, model, geom_id):
+        if model is None or geom_id is None or int(geom_id) < 0:
+            return None
+
+        geom_id = int(geom_id)
+        geom_bodyid = getattr(model, "geom_bodyid", None)
+        if geom_bodyid is None:
+            return None
+
+        try:
+            return int(geom_bodyid[geom_id])
+        except Exception:
+            return None
+
+    def _extract_contact_wrenches(self, model, data):
+        ncon = int(getattr(data, "ncon", 0))
+        if (
+            mujoco is None
+            or model is None
+            or not hasattr(data, "contact")
+            or not hasattr(mujoco, "mj_contactForce")
+            or ncon <= 0
+        ):
+            return None
+
+        contact_pairs = []
+        all_force_norms = []
+        normal_forces = []
+        tangent_forces = []
+        contact_distances = []
+        body_ids = set()
+
+        for idx in range(ncon):
+            contact = data.contact[idx]
+            wrench = np.zeros(6, dtype=float)
+            try:
+                mujoco.mj_contactForce(model, data, idx, wrench)
+            except Exception:
+                continue
+
+            geom1 = int(getattr(contact, "geom1", -1))
+            geom2 = int(getattr(contact, "geom2", -1))
+            dist = float(getattr(contact, "dist", 0.0))
+            normal_force = float(max(wrench[0], 0.0))
+            tangential_force = float(np.linalg.norm(wrench[1:3]))
+            force_norm = float(np.linalg.norm(wrench[:3]))
+
+            if force_norm <= 0.0 and dist > 1e-6:
+                continue
+
+            body1 = self._body_id_from_geom(model, geom1)
+            body2 = self._body_id_from_geom(model, geom2)
+            if body1 is not None:
+                body_ids.add(body1)
+            if body2 is not None:
+                body_ids.add(body2)
+
+            all_force_norms.append(force_norm)
+            normal_forces.append(normal_force)
+            tangent_forces.append(tangential_force)
+            contact_distances.append(dist)
+            contact_pairs.append(
+                {
+                    "geom1": geom1,
+                    "geom2": geom2,
+                    "geom1_name": self._geom_name(model, geom1),
+                    "geom2_name": self._geom_name(model, geom2),
+                    "dist": dist,
+                    "normal_force": normal_force,
+                    "tangent_force": tangential_force,
+                    "force_norm": force_norm,
+                }
+            )
+
+        if not contact_pairs:
+            return None
+
+        return {
+            "contact_pairs": contact_pairs,
+            "contact_force_total": float(np.sum(all_force_norms)),
+            "contact_force_max": float(np.max(all_force_norms)),
+            "contact_force_mean": float(np.mean(all_force_norms)),
+            "contact_normal_force_max": float(np.max(normal_forces)),
+            "contact_tangent_force_max": float(np.max(tangent_forces)),
+            "contact_distance_min": float(np.min(contact_distances)),
+            "contact_pair_count": len(contact_pairs),
+            "contact_body_count": len(body_ids),
+            "physics_contact": True,
+            "ncon": ncon,
+            "mujoco_available": True,
+            "contact_source": "mujoco.mj_contactForce",
+        }
+
+    def _extract_contact_forces(self):
+        model, data = self._get_model_and_data()
+
+        if data is None:
             return {
                 "contact_force_total": 0.0,
                 "contact_force_max": 0.0,
                 "contact_force_mean": 0.0,
+                "contact_normal_force_max": 0.0,
+                "contact_tangent_force_max": 0.0,
+                "contact_distance_min": np.inf,
+                "contact_pair_count": 0,
                 "contact_body_count": 0,
                 "physics_contact": False,
                 "ncon": 0,
                 "mujoco_available": False,
+                "contact_pairs": [],
+                "contact_source": None,
+            }
+
+        contact_wrenches = self._extract_contact_wrenches(model, data)
+        if contact_wrenches is not None:
+            return contact_wrenches
+
+        if not hasattr(data, "cfrc_ext"):
+            return {
+                "contact_force_total": 0.0,
+                "contact_force_max": 0.0,
+                "contact_force_mean": 0.0,
+                "contact_normal_force_max": 0.0,
+                "contact_tangent_force_max": 0.0,
+                "contact_distance_min": np.inf,
+                "contact_pair_count": 0,
+                "contact_body_count": 0,
+                "physics_contact": False,
+                "ncon": int(getattr(data, "ncon", 0)),
+                "mujoco_available": False,
+                "contact_pairs": [],
+                "contact_source": None,
             }
 
         cfrc_ext = np.asarray(data.cfrc_ext, dtype=float)
@@ -86,10 +250,16 @@ class ContactDropoutEnv:
                 "contact_force_total": 0.0,
                 "contact_force_max": 0.0,
                 "contact_force_mean": 0.0,
+                "contact_normal_force_max": 0.0,
+                "contact_tangent_force_max": 0.0,
+                "contact_distance_min": np.inf,
+                "contact_pair_count": 0,
                 "contact_body_count": 0,
                 "physics_contact": False,
                 "ncon": int(getattr(data, "ncon", 0)),
                 "mujoco_available": False,
+                "contact_pairs": [],
+                "contact_source": None,
             }
 
         # MuJoCo cfrc_ext is [torque_x, torque_y, torque_z, force_x, force_y, force_z]
@@ -105,10 +275,16 @@ class ContactDropoutEnv:
             "contact_force_total": contact_force_total,
             "contact_force_max": contact_force_max,
             "contact_force_mean": contact_force_mean,
+            "contact_normal_force_max": contact_force_max,
+            "contact_tangent_force_max": 0.0,
+            "contact_distance_min": np.inf,
+            "contact_pair_count": int(getattr(data, "ncon", 0)),
             "contact_body_count": contact_body_count,
             "physics_contact": contact_force_total >= self.contact_force_threshold,
             "ncon": int(getattr(data, "ncon", 0)),
             "mujoco_available": True,
+            "contact_pairs": [],
+            "contact_source": self._contact_source,
         }
 
     def reset(self, seed=None):
@@ -151,10 +327,15 @@ class ContactDropoutEnv:
         info['contact_force_total'] = contact_info["contact_force_total"]
         info['contact_force_max'] = contact_info["contact_force_max"]
         info['contact_force_mean'] = contact_info["contact_force_mean"]
+        info['contact_normal_force_max'] = contact_info["contact_normal_force_max"]
+        info['contact_tangent_force_max'] = contact_info["contact_tangent_force_max"]
+        info['contact_distance_min'] = contact_info["contact_distance_min"]
+        info['contact_pair_count'] = contact_info["contact_pair_count"]
         info['contact_body_count'] = contact_info["contact_body_count"]
         info['contact_force_threshold'] = self.contact_force_threshold
-        info['contact_source'] = self._contact_source
+        info['contact_source'] = contact_info.get("contact_source", self._contact_source)
         info['ncon'] = contact_info["ncon"]
+        info['contact_pairs'] = contact_info["contact_pairs"]
 
         if self.dropout_countdown > 0:
             obs_return = self.frozen_obs.copy()

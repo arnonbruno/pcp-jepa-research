@@ -31,13 +31,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # DATA GENERATION FOR SEQUENTIAL MODELS
 # =============================================================================
 
-def generate_trajectory_data(sac_model, n_episodes=300, max_len=1000, env_id='Hopper-v4'):
+def generate_trajectory_data(sac_model, n_episodes=300, max_len=1000, env_id='Hopper-v4', seed=42):
     """Generate full trajectories for training sequence models (World Models)."""
     env = gym.make(env_id)
     trajectories = []
     
     for ep in range(n_episodes):
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=seed + ep)
         traj = {'obs': [obs.copy()], 'action': []}
         
         for step in range(max_len):
@@ -409,7 +409,7 @@ def eval_rssm(sac_model, rssm, n_episodes=100, dropout_duration=5, velocity_thre
                 break
         rewards.append(total_reward)
         
-    res = summarize_results('DreamerV3 (RSSM)', np.array(rewards), np.array(vel_errors) if vel_errors else None)
+    res = summarize_results('Simplified RSSM', np.array(rewards), np.array(vel_errors) if vel_errors else None)
     env.close()
     return res
 
@@ -450,7 +450,7 @@ def eval_told(sac_model, told, n_episodes=100, dropout_duration=5, velocity_thre
                 break
         rewards.append(total_reward)
         
-    res = summarize_results('TD-MPC2 (TOLD)', np.array(rewards), np.array(vel_errors) if vel_errors else None)
+    res = summarize_results('Simplified TOLD', np.array(rewards), np.array(vel_errors) if vel_errors else None)
     env.close()
     return res
 
@@ -468,14 +468,14 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     torch.manual_seed(seed)
     
     print("=" * 70)
-    print("SOTA WORLD MODELS EVALUATION: Contact-Triggered Dropout")
+    print("SIMPLIFIED WORLD MODELS EVALUATION: Contact-Triggered Dropout")
     print("=" * 70)
     
     print("\n[1/4] Loading pretrained Oracle...")
     sac_model = get_pretrained_oracle('Hopper-v4')
     
     print(f"\n[2/4] Generating training data for World Models ({train_episodes} episodes)...")
-    trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes)
+    trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes, seed=seed)
     env = gym.make('Hopper-v4')
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
@@ -492,10 +492,10 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print(f"  Frozen: {frozen_res['reward_mean']:.1f}")
     
     rssm_res = eval_rssm(sac_model, rssm, n_episodes, dropout_duration, velocity_threshold, seed=seed)
-    print(f"  DreamerV3 (RSSM): {rssm_res['reward_mean']:.1f}")
+    print(f"  Simplified RSSM: {rssm_res['reward_mean']:.1f}")
     
     told_res = eval_told(sac_model, told, n_episodes, dropout_duration, velocity_threshold, seed=seed)
-    print(f"  TD-MPC2 (TOLD): {told_res['reward_mean']:.1f}")
+    print(f"  Simplified TOLD: {told_res['reward_mean']:.1f}")
     
     print("\n" + "=" * 70)
     print("STATISTICAL TESTS (Welch's t-test)")
@@ -503,15 +503,15 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     
     comparisons = {}
     
-    comp_rssm_frozen = compare_methods(rssm_res, frozen_res, "DreamerV3 vs Frozen")
-    comparisons['dreamerv3_vs_frozen'] = comp_rssm_frozen
-    print(f"  DreamerV3 vs Frozen: Δ={comp_rssm_frozen['improvement_absolute']:+.1f} "
+    comp_rssm_frozen = compare_methods(rssm_res, frozen_res, "Simplified RSSM vs Frozen")
+    comparisons['rssm_vs_frozen'] = comp_rssm_frozen
+    print(f"  RSSM vs Frozen: Δ={comp_rssm_frozen['improvement_absolute']:+.1f} "
           f"({comp_rssm_frozen['improvement_pct']:+.1f}%), "
           f"p={comp_rssm_frozen['p_value']:.4f}")
           
-    comp_told_frozen = compare_methods(told_res, frozen_res, "TD-MPC2 vs Frozen")
-    comparisons['tdmpc2_vs_frozen'] = comp_told_frozen
-    print(f"  TD-MPC2 vs Frozen:   Δ={comp_told_frozen['improvement_absolute']:+.1f} "
+    comp_told_frozen = compare_methods(told_res, frozen_res, "Simplified TOLD vs Frozen")
+    comparisons['told_vs_frozen'] = comp_told_frozen
+    print(f"  TOLD vs Frozen:   Δ={comp_told_frozen['improvement_absolute']:+.1f} "
           f"({comp_told_frozen['improvement_pct']:+.1f}%), "
           f"p={comp_told_frozen['p_value']:.4f}")
 
@@ -537,8 +537,8 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
         'methods': {
             'oracle': oracle_res,
             'frozen': frozen_res,
-            'dreamerv3': rssm_res,
-            'tdmpc2': told_res
+            'rssm': rssm_res,
+            'told': told_res
         },
         'comparisons': comparisons
     }

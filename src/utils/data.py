@@ -2,15 +2,19 @@ import torch
 import numpy as np
 import gymnasium as gym
 
-def generate_jepa_data(env, sac_model, n_transitions, dt, device='cuda'):
+from src.envs.contact_dropout import ContactDropoutEnv
+
+def generate_jepa_data(env, sac_model, n_transitions, dt, device='cuda', seed=42):
     """Generate exactly n_transitions from an environment using the SAC oracle."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
     data = {'obs': [], 'obs_prev': [], 'action': [], 'obs_next': [], 'obs_prev_next': []}
     count = 0
+    ep = 0
     while count < n_transitions:
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=seed + ep)
+        ep += 1
         obs_prev = obs.copy()
         for _ in range(1000):
             action, _ = sac_model.predict(obs, deterministic=True)
@@ -31,7 +35,7 @@ def generate_jepa_data(env, sac_model, n_transitions, dt, device='cuda'):
         data[k] = torch.tensor(np.array(data[k][:n_transitions]), dtype=torch.float32, device=device)
     return data
 
-def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', device='cuda'):
+def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', device='cuda', seed=42):
     """Generate training data for a fixed number of episodes."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
@@ -43,7 +47,7 @@ def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', d
     }
     
     for ep in range(n_episodes):
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=seed + ep)
         obs_prev = obs.copy()
         
         for step in range(1000):
@@ -72,7 +76,7 @@ def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', d
     print(f"Generated {len(data['obs'])} transitions")
     return data
 
-def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-v4', device='cuda'):
+def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-v4', device='cuda', seed=42):
     """Generate training data for PANO velocity predictor."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
@@ -85,7 +89,7 @@ def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-
     dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.002
 
     for ep in range(n_episodes):
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=seed + ep)
         obs_prev = obs.copy()
         action_history = [np.zeros(action_dim) for _ in range(history_len)]
 
@@ -111,4 +115,78 @@ def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-
         data[k] = torch.tensor(np.array(data[k]), dtype=torch.float32, device=device)
 
     print(f"Generated {len(data['obs'])} transitions from {n_episodes} episodes")
+    return data
+
+
+def generate_event_jepa_data(
+    sac_model,
+    n_episodes=300,
+    env_id='Hopper-v4',
+    velocity_threshold=0.1,
+    device='cuda',
+    seed=42,
+):
+    """
+    Generate transition data plus MuJoCo contact semantics for EventConsistentJEPA.
+
+    We use the contact wrapper with `dropout_duration=0` so observations stay
+    uncorrupted while the wrapper still exposes ground-truth contact metadata.
+    """
+    if isinstance(device, str):
+        device = torch.device(device if torch.cuda.is_available() else 'cpu')
+
+    env = ContactDropoutEnv(
+        env_id=env_id,
+        dropout_duration=0,
+        velocity_threshold=velocity_threshold,
+    )
+    dt = env.env.unwrapped.dt if hasattr(env.env.unwrapped, 'dt') else 0.002
+
+    data = {
+        'obs': [],
+        'obs_prev': [],
+        'action': [],
+        'obs_next': [],
+        'obs_prev_next': [],
+        'contact': [],
+        'contact_force': [],
+        'contact_impulse': [],
+        'contact_distance': [],
+    }
+
+    for ep in range(n_episodes):
+        obs, _ = env.reset(seed=seed + ep)
+        obs_prev = obs.copy()
+
+        for _ in range(1000):
+            action, _ = sac_model.predict(obs, deterministic=True)
+            obs_next, _, term, trunc, info = env.step(action)
+            true_next = info['true_obs'].copy()
+
+            contact_force = float(info.get('contact_normal_force_max', info.get('contact_force_max', 0.0)))
+            contact_distance = float(info.get('contact_distance_min', np.inf))
+            if not np.isfinite(contact_distance):
+                contact_distance = 1.0
+
+            data['obs'].append(obs.copy())
+            data['obs_prev'].append(obs_prev.copy())
+            data['action'].append(action.copy())
+            data['obs_next'].append(true_next)
+            data['obs_prev_next'].append(obs.copy())
+            data['contact'].append([1.0 if info.get('contact_detected', False) else 0.0])
+            data['contact_force'].append([contact_force])
+            data['contact_impulse'].append([contact_force * dt])
+            data['contact_distance'].append([contact_distance])
+
+            obs_prev = obs.copy()
+            obs = true_next
+            if term or trunc:
+                break
+
+    env.close()
+
+    for key in data:
+        data[key] = torch.tensor(np.array(data[key]), dtype=torch.float32, device=device)
+
+    print(f"Generated {len(data['obs'])} event-aware transitions from {n_episodes} episodes")
     return data

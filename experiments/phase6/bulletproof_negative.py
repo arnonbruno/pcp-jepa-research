@@ -2,16 +2,15 @@
 """
 Bulletproof Negative Protocol — Multi-Experiment Validation
 
-Demonstrates that JEPA-style latent rollout diverges exponentially in
+Demonstrates that JEPA-style latent rollout diverges in
 high-dimensional continuous control. Three experiments:
 
 1. Data Scaling Law: Training on 10k–100k transitions does not fix
    the prediction-velocity loss gap (architectural limit, not data starvation).
-2. Continuous Control Ablation: Standard Latent JEPA fails on hybrid/contact
-   environments (Hopper, Walker2d) but succeeds on smooth systems (HalfCheetah) —
-   the failure IS specific to hybrid contact boundaries, not dimensionality.
-3. Impact Horizon Profiling: Latent prediction error vs rollout steps,
-   showing exponential drift regardless of physics phase.
+2. Continuous Control Ablation: compare Hopper, Walker2d, and HalfCheetah to
+   characterize how environment dynamics change the failure mode.
+3. Impact Horizon Profiling: latent prediction error vs rollout steps,
+   showing rapid multistep drift.
 
 All results are saved as structured JSON with statistical tests.
 """
@@ -29,6 +28,11 @@ import argparse
 import warnings
 warnings.filterwarnings('ignore')
 
+# Add project root to path before importing src
+import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Hugging Face pretrained models
 from huggingface_sb3 import load_from_hub
 from src.models.jepa import StandardLatentJEPA
@@ -37,7 +41,6 @@ from src.utils.data import generate_jepa_data as generate_data
 from src.utils.training import train_standard_jepa
 
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -69,7 +72,7 @@ def get_pretrained_oracle(env_id):
     model = SAC.load(checkpoint, env=env)
     
     # Quick test
-    obs, _ = env.reset()
+    obs, _ = env.reset(seed=42)
     total_reward = 0
     for _ in range(1000):
         action, _ = model.predict(obs, deterministic=True)
@@ -156,15 +159,14 @@ def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_epi
     Test Standard Latent JEPA on multiple MuJoCo environments:
       - Hopper-v4 (hybrid/contact)
       - Walker2d-v4 (bipedal contact)
-      - HalfCheetah-v4 (contact-rich)
-      - InvertedDoublePendulum-v4 (smooth, NO hybrid contact)
+      - HalfCheetah-v4 (smooth locomotion with different contact profile)
 
-    If Standard Latent JEPA fails on ALL of them (including smooth systems),
-    the failure is NOT specific to hybrid dynamics — it is architectural.
+    The goal is to characterize environment dependence, not to over-claim a
+    universal or strictly hybrid-only failure law.
     """
     print("\n" + "=" * 70)
     print("EXPERIMENT 2: CONTINUOUS CONTROL ABLATION (Multi-Environment)")
-    print("Does Standard Latent JEPA fail only on hybrid systems? (Answer: No)")
+    print("How environment-dependent is the latent rollout failure mode?")
     print("=" * 70)
 
     envs = [
@@ -338,13 +340,13 @@ def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_epi
               f"{r['loss_ratio']:>5.0f}×")
 
     failed_count = sum(1 for r in all_results if r['jepa_reward_mean'] < r['baseline_reward_mean'])
-    print(f"\nStandard Latent JEPA failed on {failed_count}/{len(all_results)} environments")
+    print(f"\nStandard Latent JEPA underperformed baseline on {failed_count}/{len(all_results)} environments")
     if failed_count == len(all_results):
-        print("→ CONFIRMED: Failure is architectural, NOT hybrid-specific")
+        print("→ JEPA underperformed everywhere in this sweep")
     elif failed_count > 0:
-        print("→ Partial failure: JEPA struggles on most environments")
+        print("→ Failure is environment dependent, with the clearest degradation on Hopper")
     else:
-        print("→ NOT CONFIRMED: JEPA matched/exceeded baseline on all environments")
+        print("→ JEPA matched/exceeded baseline on all tested environments")
 
     return all_results
 
@@ -357,14 +359,14 @@ def experiment_3_impact_profiling(sac_model, seed=42):
     Profile latent prediction error vs rollout steps, separated by
     air phase vs contact-boundary phase.
 
-    Shows that error grows exponentially regardless of physics phase.
+    Shows that error grows rapidly with rollout depth.
     """
     print("\n" + "=" * 70)
     print("EXPERIMENT 3: IMPACT HORIZON PROFILING")
     print("How does latent error grow over rollout steps?")
     print("=" * 70)
 
-    env = gym.make('Hopper-v4')
+    env = ContactDropoutEnv('Hopper-v4', dropout_duration=0)
     obs_dim = 11
     action_dim = 3
     dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.008
@@ -388,15 +390,14 @@ def experiment_3_impact_profiling(sac_model, seed=42):
             data['obs_prev'].append(obs_prev)
             data['action'].append(action)
 
-            obs_next, _, term, trunc, _ = env.step(action)
+            obs_next, reward, term, trunc, info = env.step(action)
             data['obs_next'].append(obs_next)
             data['obs_prev_next'].append(obs)
 
-            curr_height = obs[1]
-            phase = 1 if (prev_height > 0.8 and curr_height <= 0.8) else 0
+            # Use proper MuJoCo contact semantics
+            phase = 1 if info.get('contact_detected', False) else 0
             data['phase'].append(phase)
 
-            prev_height = curr_height
             obs_prev = obs.copy()
             obs = obs_next
             if term or trunc:
@@ -489,10 +490,10 @@ if __name__ == '__main__':
     print("=" * 70)
     print("BULLETPROOF NEGATIVE PROTOCOL")
     print("=" * 70)
-    print("Three experiments proving Standard Latent JEPA diverges:")
+    print("Three experiments probing Standard Latent JEPA failure:")
     print("  1. Data Scaling Law (rule out data starvation)")
-    print("  2. Multi-Env Ablation (rule out hybrid-specific failure)")
-    print("  3. Impact Horizon Profiling (quantify exponential drift)")
+    print("  2. Multi-Env Ablation (measure environment dependence)")
+    print("  3. Impact Horizon Profiling (quantify multistep drift)")
     print("=" * 70)
 
     # Load Hopper oracle for experiments 1 & 3 (using pretrained)
@@ -539,14 +540,14 @@ if __name__ == '__main__':
 
     print("\nExperiment 2: Multi-Environment Ablation")
     failed = sum(1 for r in exp2_results if r['jepa_reward_mean'] < r['baseline_reward_mean'])
-    print(f"  → Standard Latent JEPA failed on {failed}/{len(exp2_results)} environments")
+    print(f"  → Standard Latent JEPA underperformed baseline on {failed}/{len(exp2_results)} environments")
     for r in exp2_results:
         status = "FAIL" if r['jepa_reward_mean'] < r['baseline_reward_mean'] else "OK"
         print(f"    {r['env_id']:<30} [{status}] JEPA={r['jepa_reward_mean']:.1f} vs "
               f"Baseline={r['baseline_reward_mean']:.1f}")
 
     print("\nExperiment 3: Impact Horizon Profiling")
-    print("  → Error grows exponentially with rollout steps")
+    print("  → Error grows rapidly with rollout steps")
     if exp3_results:
         step1 = exp3_results[0]['overall_error']
         step10 = exp3_results[-1]['overall_error']
@@ -556,6 +557,6 @@ if __name__ == '__main__':
         print(f"    Growth factor: {growth:.0f}×")
 
     print("\n" + "=" * 70)
-    print("CONCLUSION: Standard Latent JEPA rollout fails across environments")
-    print("            and data scales. The failure is architectural.")
+    print("CONCLUSION: Standard Latent JEPA rollout is brittle under dropout,")
+    print("            and current evidence supports a negative-results narrative.")
     print("=" * 70)

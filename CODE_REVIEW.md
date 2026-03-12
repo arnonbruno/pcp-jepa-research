@@ -135,7 +135,7 @@ for ep in range(n_episodes):
 ## 📊 VALIDATION OF RESULTS
 
 ### Statistical Significance
-- PANO vs Frozen: **p = 0.0217** ✓ (significant at α=0.05)
+- PANO vs Frozen: **p = 0.568** (not significant at α=0.05)
 - PANO vs EKF: **p < 0.001** ✓ (highly significant)
 - EKF vs Frozen: **p < 0.001** ✓ (catastrophic failure confirmed)
 

@@ -22,6 +22,11 @@ import numpy as np
 import gymnasium as gym
 from stable_baselines3 import SAC
 import warnings
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 from src.models.jepa import StandardLatentJEPA
 from src.envs.contact_dropout import ContactDropoutEnv, CriticalDropoutEnv
 from src.utils.data import generate_jepa_data_episodes as generate_data
@@ -73,7 +78,7 @@ def test_standard_jepa(sac_model, jepa_model, n_episodes=30, dropout_duration=5,
     results = {'velocity_error': [], 'reward': [], 'length': []}
     
     for ep in range(n_episodes):
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=42 + ep)
         obs_prev = obs.copy()
         total_reward = 0
         vel_errors = []
@@ -142,7 +147,7 @@ def test_fd_baseline(sac_model, n_episodes=30, dropout_duration=5, velocity_thre
     results = {'velocity_error': [], 'reward': [], 'length': []}
     
     for ep in range(n_episodes):
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=42 + ep)
         obs_prev = obs.copy()
         total_reward = 0
         vel_errors = []
@@ -177,7 +182,7 @@ def test_oracle_velocity(sac_model, n_episodes=30, dropout_duration=5, velocity_
     results = {'reward': [], 'length': []}
     
     for ep in range(n_episodes):
-        obs, _ = env.reset()
+        obs, _ = env.reset(seed=42 + ep)
         total_reward = 0
         
         for step in range(1000):
@@ -226,7 +231,7 @@ if __name__ == '__main__':
     
     # Oracle baseline
     env = gym.make('Hopper-v4')
-    obs, _ = env.reset()
+    obs, _ = env.reset(seed=42)
     oracle_reward = 0
     for _ in range(1000):
         action, _ = sac_model.predict(obs, deterministic=True)
