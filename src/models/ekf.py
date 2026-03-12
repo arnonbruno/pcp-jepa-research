@@ -718,19 +718,74 @@ class EKFEstimator:
 
     def predict(self):
         """Prediction step for a constant-velocity motion model."""
-        F = np.eye(self.state_dim)
-        F[: self.obs_dim, self.obs_dim :] = np.eye(self.obs_dim) * self.dt
-        self.x = F @ self.x
-        self.P = F @ self.P @ F.T + self.Q
+        # F @ x is equivalent to: x[:obs_dim] += dt * x[obs_dim:]
+        self.x[:self.obs_dim] += self.dt * self.x[self.obs_dim:]
+        if np.any(np.isnan(self.x)) or np.any(np.isinf(self.x)):
+            self.x = np.zeros(self.state_dim)
+        
+        # F @ P @ F.T + Q
+        # F = I + dt * U, where U = [[0, I], [0, 0]]
+        # P_new = P + dt*(U P + P U.T) + dt^2 * U P U.T + Q
+        # Let P = [[P11, P12], [P21, P22]]
+        # U P = [[P21, P22], [0, 0]]
+        # P U.T = [[P12, 0], [P22, 0]]
+        # U P U.T = [[P22, 0], [0, 0]]
+        
+        P11 = self.P[:self.obs_dim, :self.obs_dim]
+        P12 = self.P[:self.obs_dim, self.obs_dim:]
+        P21 = self.P[self.obs_dim:, :self.obs_dim]
+        P22 = self.P[self.obs_dim:, self.obs_dim:]
+        
+        P11_new = P11 + self.dt * (P21 + P12) + (self.dt**2) * P22
+        P12_new = P12 + self.dt * P22
+        P21_new = P21 + self.dt * P22
+        
+        self.P[:self.obs_dim, :self.obs_dim] = P11_new
+        self.P[:self.obs_dim, self.obs_dim:] = P12_new
+        self.P[self.obs_dim:, :self.obs_dim] = P21_new
+        self.P += self.Q
+        
+        # Ensure symmetry and stability
+        self.P = (self.P + self.P.T) * 0.5
+        if np.any(np.isnan(self.P)) or np.any(np.isinf(self.P)):
+            self.P = np.eye(self.state_dim)
 
     def update(self, obs):
         """Measurement update when an observation is available."""
         obs = np.asarray(obs, dtype=float)
-        y = obs - self.H @ self.x
-        S = self.H @ self.P @ self.H.T + self.R
-        K = self.P @ self.H.T @ np.linalg.pinv(S)
+        # y = obs - H x (H is [I, 0])
+        y = obs - self.x[:self.obs_dim]
+        
+        # S = H P H.T + R = P11 + R
+        S = self.P[:self.obs_dim, :self.obs_dim] + self.R
+        
+        # Prevent singular/NaN matrices
+        if np.any(np.isnan(S)) or np.any(np.isinf(S)):
+            S = np.eye(self.obs_dim)
+        else:
+            S = S + np.eye(self.obs_dim) * 1e-6
+            
+        try:
+            # We can use numpy's solve since S is symmetric positive definite
+            # K = P H.T inv(S) = [P11, P21].T @ inv(S)
+            # K = [[P11 inv(S)], [P21 inv(S)]]
+            PH_T = self.P[:, :self.obs_dim]
+            K = np.linalg.solve(S, PH_T.T).T
+        except Exception:
+            PH_T = self.P[:, :self.obs_dim]
+            K = PH_T
+            
         self.x = self.x + K @ y
-        self.P = (np.eye(self.state_dim) - K @ self.H) @ self.P
+        if np.any(np.isnan(self.x)) or np.any(np.isinf(self.x)):
+            self.x = np.zeros(self.state_dim)
+        
+        # P = (I - K H) P = P - K H P
+        # H P = [P11, P12]
+        self.P = self.P - K @ self.P[:self.obs_dim, :]
+        # Ensure symmetry and stability
+        self.P = (self.P + self.P.T) * 0.5
+        if np.any(np.isnan(self.P)) or np.any(np.isinf(self.P)):
+            self.P = np.eye(self.state_dim)
 
     def filter_sequence(self, observations, measurement_mask=None):
         observations = np.asarray(observations, dtype=float)

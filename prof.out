@@ -1,0 +1,38 @@
+         10350 function calls (10197 primitive calls) in 5.080 seconds
+
+   Ordered by: internal time
+   List reduced from 441 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+     10/4    4.994    0.499    4.985    1.246 {method 'acquire' of '_thread.lock' objects}
+      9/5    0.027    0.003    0.029    0.006 {built-in method _imp.exec_dynamic}
+       28    0.025    0.001    0.026    0.001 /home/ulluboz/miniconda3/lib/python3.13/inspect.py:891(cleandoc)
+        4    0.014    0.004    0.014    0.004 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/_core/getlimits.py:550(_init)
+     16/2    0.004    0.000    0.084    0.042 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)
+        9    0.004    0.000    0.004    0.000 {built-in method _imp.create_dynamic}
+        7    0.002    0.000    0.002    0.000 {method 'read' of '_io.BufferedReader' objects}
+        7    0.001    0.000    0.001    0.000 {built-in method marshal.loads}
+        7    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap_external>:779(_compile_bytecode)
+        1    0.000    0.000    0.016    0.016 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/ma/core.py:1(<module>)
+       28    0.000    0.000    0.000    0.000 {built-in method builtins.__build_class__}
+        1    0.000    0.000    0.001    0.001 /home/ulluboz/pcp-jepa-research/src/models/ekf.py:208(__init__)
+        4    0.000    0.000    0.000    0.000 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/_core/_methods.py:150(_var)
+       51    0.000    0.000    0.000    0.000 {built-in method posix.stat}
+1902/1897    0.000    0.000    0.000    0.000 {built-in method builtins.len}
+        1    0.000    0.000    0.051    0.051 /home/ulluboz/pcp-jepa-research/src/models/ekf.py:454(estimate_noise_from_trajectories)
+       11    0.000    0.000    0.000    0.000 {built-in method numpy.zeros}
+       18    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap_external>:1621(find_spec)
+        1    0.000    0.000    5.071    5.071 <string>:6(run)
+        6    0.000    0.000    0.000    0.000 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/lib/_twodim_base_impl.py:176(eye)
+       50    0.000    0.000    0.000    0.000 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/ma/core.py:944(__init__)
+       20    0.000    0.000    0.000    0.000 <frozen importlib._bootstrap>:74(__new__)
+        7    0.000    0.000    0.000    0.000 {built-in method _io.open_code}
+       14    0.000    0.000    0.000    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+       16    0.000    0.000    0.001    0.000 <frozen importlib._bootstrap>:1240(_find_spec)
+        8    0.000    0.000    0.000    0.000 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/_core/_methods.py:98(_clip)
+      947    0.000    0.000    0.000    0.000 {method 'lstrip' of 'str' objects}
+        1    0.000    0.000    0.050    0.050 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/ma/__init__.py:1(<module>)
+      293    0.000    0.000    0.000    0.000 {built-in method builtins.getattr}
+       30    0.000    0.000    0.000    0.000 /home/ulluboz/miniconda3/lib/python3.13/site-packages/numpy/_utils/_inspect.py:141(formatargspec)
+
+

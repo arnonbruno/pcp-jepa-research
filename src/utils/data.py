@@ -94,7 +94,7 @@ def generate_jepa_data_episodes(sac_model, n_episodes=200, env_id='Hopper-v4', d
     print(f"Generated {len(data['obs'])} transitions")
     return data
 
-def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-v4', device='cuda', seed=42):
+def generate_pano_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-v4', device='cpu', seed=42):
     """Generate training data for the forward PANO velocity predictor."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')

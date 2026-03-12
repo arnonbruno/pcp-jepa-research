@@ -11,7 +11,12 @@ Evaluates state estimation under contact-triggered sensor dropout:
 All results are saved as structured JSON with statistical tests.
 """
 
+import sys
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
 import torch
+torch.set_num_threads(1)
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -19,7 +24,6 @@ import gymnasium as gym
 from stable_baselines3 import SAC
 import json
 import os
-import sys
 import warnings
 import argparse
 warnings.filterwarnings('ignore')
@@ -41,7 +45,7 @@ from src.utils.data import generate_pano_data as generate_training_data
 from src.utils.training import train_pano
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cpu')
 TRAIN_EVAL_SEED_OFFSET = 10_000
 
 # =============================================================================
@@ -69,7 +73,7 @@ def get_pretrained_oracle(env_id='Hopper-v4'):
     print(f"Downloading pretrained expert from HuggingFace: {repo_id}")
     checkpoint = load_from_hub(repo_id=repo_id, filename=filename)
     
-    if env_id == 'Ant-v4':
+    if env_id == "Ant-v4":
         env = gym.make(env_id, use_contact_forces=True)
     else:
         env = gym.make(env_id)
@@ -99,10 +103,13 @@ def get_oracle(model_path='hopper_sac.zip'):
     return get_pretrained_oracle('Hopper-v4')
 
 
-def train_oracle(model_path='hopper_sac.zip', total_timesteps=1_000_000, seed=42):
+def train_oracle(env_id='Hopper-v4', model_path='hopper_sac.zip', total_timesteps=1_000_000, seed=42):
     """Train a strong SAC oracle (1M steps for proper convergence)."""
     print(f"Training SAC oracle for {total_timesteps} steps...")
-    env = gym.make('Hopper-v4')
+    if env_id == 'Ant-v4':
+        env = gym.make(env_id, use_contact_forces=True)
+    else:
+        env = gym.make(env_id)
     model = SAC('MlpPolicy', env, learning_rate=3e-4, buffer_size=300_000,
                 learning_starts=10_000, batch_size=256, tau=0.005,
                 gamma=0.99, verbose=0, seed=seed)
@@ -414,7 +421,7 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
         if os.path.exists(oracle_path):
             os.remove(oracle_path)
             print(f"  Removed stale oracle {oracle_path}, retraining...")
-        sac_model = train_oracle(oracle_path, total_timesteps=oracle_steps, seed=seed)
+        sac_model = train_oracle(env_id=env_id, model_path=oracle_path, total_timesteps=oracle_steps, seed=seed)
 
     # --- Train PANO ---
     print("\n[1/5] Training PANO velocity predictor...")
