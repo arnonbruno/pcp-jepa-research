@@ -107,7 +107,8 @@ def create_batches(trajectories, seq_len=16, batch_size=64):
 
 class DreamerRSSM(nn.Module):
     """
-    Simplified Recurrent State Space Model (DreamerV3 style).
+    Recurrent State Space Model (DreamerV3 style).
+    NOTE: This is a stress-test proxy, not an official implementation.
     Deterministic RNN + Stochastic latent state.
     """
     def __init__(self, obs_dim, act_dim, hidden_dim=256, latent_dim=32):
@@ -224,7 +225,8 @@ class DreamerRSSM(nn.Module):
 
 class TDMPCTOLD(nn.Module):
     """
-    Simplified Task-Oriented Latent Dynamics (TD-MPC2 style).
+    Task-Oriented Latent Dynamics (TD-MPC2 style).
+    NOTE: This is a stress-test proxy, not an official implementation.
     Joint-embedding predictive architecture.
     """
     def __init__(self, obs_dim, act_dim, latent_dim=128):
@@ -420,7 +422,7 @@ def eval_rssm(sac_model, rssm, n_episodes=100, dropout_duration=5, velocity_thre
                 break
         rewards.append(total_reward)
         
-    res = summarize_results('Simplified RSSM', np.array(rewards), np.array(state_errors) if state_errors else None)
+    res = summarize_results('RSSM', np.array(rewards), np.array(state_errors) if state_errors else None)
     res = relabel_state_error_metric(res)
     env.close()
     return res
@@ -462,7 +464,7 @@ def eval_told(sac_model, told, n_episodes=100, dropout_duration=5, velocity_thre
                 break
         rewards.append(total_reward)
         
-    res = summarize_results('Simplified TOLD', np.array(rewards), np.array(state_errors) if state_errors else None)
+    res = summarize_results('TOLD', np.array(rewards), np.array(state_errors) if state_errors else None)
     res = relabel_state_error_metric(res)
     env.close()
     return res
@@ -472,7 +474,7 @@ def eval_told(sac_model, told, n_episodes=100, dropout_duration=5, velocity_thre
 # =============================================================================
 
 def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1, 
-                   results_dir=None, seed=42, train_episodes=300, train_epochs=100):
+                   results_dir=None, seed=42, train_episodes=300, train_epochs=100, env_id='Hopper-v4'):
     
     if results_dir is None:
         results_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'results', 'phase6')
@@ -483,17 +485,18 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     eval_seed = seed + TRAIN_EVAL_SEED_OFFSET
     
     print("=" * 70)
-    print("SIMPLIFIED WORLD MODELS EVALUATION: Contact-Triggered Dropout")
+    print(f"WORLD MODELS EVALUATION: Contact-Triggered Dropout ({env_id})")
+    print("Note: RSSM and TOLD are stress-test proxies, not official implementations.")
     print("=" * 70)
     print(f"Train seed: {train_seed}")
     print(f"Eval seed:  {eval_seed}")
     
-    print("\n[1/4] Loading pretrained Oracle...")
-    sac_model = get_pretrained_oracle('Hopper-v4')
+    print(f"\n[1/4] Loading pretrained Oracle for {env_id}...")
+    sac_model = get_pretrained_oracle(env_id)
     
     print(f"\n[2/4] Generating training data for World Models ({train_episodes} episodes)...")
-    trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes, seed=train_seed)
-    env = gym.make('Hopper-v4')
+    trajectories = generate_trajectory_data(sac_model, n_episodes=train_episodes, env_id=env_id, seed=train_seed)
+    env = gym.make(env_id)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
     env.close()
@@ -502,17 +505,17 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     
     print(f"\n[3/4] Evaluating Models ({n_episodes} episodes)...")
     
-    oracle_res = eval_oracle(sac_model, n_episodes, seed=eval_seed)
+    oracle_res = eval_oracle(sac_model, n_episodes, env_id=env_id, seed=eval_seed)
     print(f"  Oracle: {oracle_res['reward_mean']:.1f}")
     
-    frozen_res = eval_frozen_baseline(sac_model, n_episodes, dropout_duration, velocity_threshold, seed=eval_seed)
+    frozen_res = eval_frozen_baseline(sac_model, n_episodes, dropout_duration, velocity_threshold, env_id=env_id, seed=eval_seed)
     print(f"  Frozen: {frozen_res['reward_mean']:.1f}")
     
-    rssm_res = eval_rssm(sac_model, rssm, n_episodes, dropout_duration, velocity_threshold, seed=eval_seed)
-    print(f"  Simplified RSSM: {rssm_res['reward_mean']:.1f}")
+    rssm_res = eval_rssm(sac_model, rssm, n_episodes, dropout_duration, velocity_threshold, env_id=env_id, seed=eval_seed)
+    print(f"  RSSM: {rssm_res['reward_mean']:.1f}")
     
-    told_res = eval_told(sac_model, told, n_episodes, dropout_duration, velocity_threshold, seed=eval_seed)
-    print(f"  Simplified TOLD: {told_res['reward_mean']:.1f}")
+    told_res = eval_told(sac_model, told, n_episodes, dropout_duration, velocity_threshold, env_id=env_id, seed=eval_seed)
+    print(f"  TOLD: {told_res['reward_mean']:.1f}")
     
     print("\n" + "=" * 70)
     print("STATISTICAL TESTS (Welch's t-test)")
@@ -520,13 +523,13 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     
     comparisons = {}
     
-    comp_rssm_frozen = compare_methods(rssm_res, frozen_res, "Simplified RSSM vs Frozen")
+    comp_rssm_frozen = compare_methods(rssm_res, frozen_res, "RSSM vs Frozen")
     comparisons['rssm_vs_frozen'] = comp_rssm_frozen
     print(f"  RSSM vs Frozen: Δ={comp_rssm_frozen['improvement_absolute']:+.1f} "
           f"({comp_rssm_frozen['improvement_pct']:+.1f}%), "
           f"p={comp_rssm_frozen['p_value']:.4f}")
           
-    comp_told_frozen = compare_methods(told_res, frozen_res, "Simplified TOLD vs Frozen")
+    comp_told_frozen = compare_methods(told_res, frozen_res, "TOLD vs Frozen")
     comparisons['told_vs_frozen'] = comp_told_frozen
     print(f"  TOLD vs Frozen:   Δ={comp_told_frozen['improvement_absolute']:+.1f} "
           f"({comp_told_frozen['improvement_pct']:+.1f}%), "
@@ -547,11 +550,11 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
               f"  {vel:>10}")
               
     os.makedirs(results_dir, exist_ok=True)
-    out_file = os.path.join(results_dir, 'sota_baselines_results.json')
+    out_file = os.path.join(results_dir, f'sota_baselines_{env_id}_seed{seed}.json')
     
     all_results = {
         'experiment': 'sota_baselines',
-        'env_id': 'Hopper-v4',
+        'env_id': env_id,
         'n_episodes': n_episodes,
         'dropout_duration': dropout_duration,
         'seed': seed,
@@ -577,6 +580,7 @@ if __name__ == '__main__':
     parser.add_argument('--train-episodes', type=int, default=300)
     parser.add_argument('--train-epochs', type=int, default=100)
     parser.add_argument('--results-dir', type=str, default=None)
+    parser.add_argument('--env-id', type=str, default='Hopper-v4')
     args = parser.parse_args()
     
     run_experiment(
@@ -585,5 +589,6 @@ if __name__ == '__main__':
         results_dir=args.results_dir,
         seed=args.seed,
         train_episodes=args.train_episodes,
-        train_epochs=args.train_epochs
+        train_epochs=args.train_epochs,
+        env_id=args.env_id
     )

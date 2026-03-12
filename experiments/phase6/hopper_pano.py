@@ -375,9 +375,9 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
 # =============================================================================
 
 def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
-                   oracle_path='hopper_sac.zip', oracle_steps=1_000_000,
+                   oracle_path='oracle_sac.zip', oracle_steps=1_000_000,
                    results_dir='../../results', seed=42, retrain_oracle=False,
-                   use_pretrained=True, train_episodes=300, train_epochs=100):
+                   use_pretrained=True, train_episodes=300, train_epochs=100, env_id='Hopper-v4'):
     """Run full PANO experiment with all baselines and statistical tests."""
 
     np.random.seed(seed)
@@ -386,7 +386,7 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     eval_seed = seed + TRAIN_EVAL_SEED_OFFSET
 
     print("=" * 70)
-    print("PANO EVALUATION: Hopper-v4 with Contact-Triggered Dropout")
+    print(f"PANO EVALUATION: {env_id} with Contact-Triggered Dropout")
     print("=" * 70)
     print(f"  Episodes per method: {n_episodes}")
     print(f"  Dropout duration:    {dropout_duration} steps")
@@ -398,7 +398,7 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     # --- Load oracle ---
     if use_pretrained:
         print("\n[0/5] Loading pretrained expert from HuggingFace...")
-        sac_model = get_pretrained_oracle('Hopper-v4')
+        sac_model = get_pretrained_oracle(env_id)
     elif os.path.exists(oracle_path) and not retrain_oracle:
         print(f"  Loading existing oracle from {oracle_path}")
         print(f"  WARNING: If this oracle was trained with fewer steps, delete it and re-run.")
@@ -411,10 +411,13 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
 
     # --- Train PANO ---
     print("\n[1/5] Training PANO velocity predictor...")
-    obs_dim = 11
-    action_dim = 3
+    env = gym.make(env_id)
+    obs_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
+    env.close()
     data = generate_training_data(
         sac_model,
+        env_id=env_id,
         n_episodes=train_episodes,
         history_len=5,
         seed=train_seed,
@@ -424,28 +427,28 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
 
     # --- Evaluate all methods ---
     print(f"\n[2/5] Evaluating Oracle (no dropout, {n_episodes} episodes)...")
-    oracle_results = eval_oracle(sac_model, n_episodes=n_episodes, seed=eval_seed)
+    oracle_results = eval_oracle(sac_model, n_episodes=n_episodes, env_id=env_id, seed=eval_seed)
     print(f"  Reward: {oracle_results['reward_mean']:.1f} "
           f"[{oracle_results['reward_ci_95_lower']:.1f}, {oracle_results['reward_ci_95_upper']:.1f}]")
 
     print(f"\n[3/5] Evaluating Frozen Baseline ({n_episodes} episodes)...")
     frozen_results = eval_frozen_baseline(sac_model, n_episodes=n_episodes,
                                            dropout_duration=dropout_duration,
-                                           velocity_threshold=velocity_threshold, seed=eval_seed)
+                                           velocity_threshold=velocity_threshold, env_id=env_id, seed=eval_seed)
     print(f"  Reward: {frozen_results['reward_mean']:.1f} "
           f"[{frozen_results['reward_ci_95_lower']:.1f}, {frozen_results['reward_ci_95_upper']:.1f}]")
 
     print(f"\n[4/5] Evaluating EKF Baseline ({n_episodes} episodes)...")
     ekf_results = eval_ekf(sac_model, n_episodes=n_episodes,
                             dropout_duration=dropout_duration,
-                            velocity_threshold=velocity_threshold, seed=eval_seed)
+                            velocity_threshold=velocity_threshold, env_id=env_id, seed=eval_seed)
     print(f"  Reward: {ekf_results['reward_mean']:.1f} "
           f"[{ekf_results['reward_ci_95_lower']:.1f}, {ekf_results['reward_ci_95_upper']:.1f}]")
 
     print(f"\n[5/5] Evaluating PANO ({n_episodes} episodes)...")
     pano_results = eval_pano(sac_model, pano_model, n_episodes=n_episodes,
                               dropout_duration=dropout_duration,
-                              velocity_threshold=velocity_threshold, seed=eval_seed)
+                              velocity_threshold=velocity_threshold, env_id=env_id, seed=eval_seed)
     print(f"  Reward: {pano_results['reward_mean']:.1f} "
           f"[{pano_results['reward_ci_95_lower']:.1f}, {pano_results['reward_ci_95_upper']:.1f}]")
 
@@ -492,7 +495,7 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     # --- Save results ---
     all_results = {
         'experiment': 'hopper_pano',
-        'env_id': 'Hopper-v4',
+        'env_id': env_id,
         'n_episodes': n_episodes,
         'dropout_duration': dropout_duration,
         'velocity_threshold': velocity_threshold,
@@ -509,22 +512,23 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     }
 
     os.makedirs(results_dir, exist_ok=True)
-    save_results(all_results, os.path.join(results_dir, 'hopper_pano_results.json'))
+    save_results(all_results, os.path.join(results_dir, f'pano_{env_id}_seed{seed}.json'))
 
     return all_results
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='PANO Hopper Experiment')
+    parser = argparse.ArgumentParser(description='PANO Experiment')
     parser.add_argument('--n-episodes', type=int, default=100)
     parser.add_argument('--dropout-duration', type=int, default=5)
     parser.add_argument('--oracle-steps', type=int, default=1_000_000)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--results-dir', type=str, default='../../results/phase6')
     parser.add_argument('--retrain-oracle', action='store_true',
-                        help='Force retrain oracle even if hopper_sac.zip exists')
+                        help='Force retrain oracle even if oracle_sac.zip exists')
     parser.add_argument('--train-episodes', type=int, default=300)
     parser.add_argument('--train-epochs', type=int, default=100)
+    parser.add_argument('--env-id', type=str, default='Hopper-v4')
     args = parser.parse_args()
 
     run_experiment(
@@ -536,4 +540,5 @@ if __name__ == '__main__':
         retrain_oracle=args.retrain_oracle,
         train_episodes=args.train_episodes,
         train_epochs=args.train_epochs,
+        env_id=args.env_id,
     )
