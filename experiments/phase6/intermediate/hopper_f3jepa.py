@@ -25,7 +25,7 @@ from src.envs.contact_dropout import ContactDropoutEnv, CriticalDropoutEnv
 
 warnings.filterwarnings('ignore')
 
-device = torch.device('cuda')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using: {device}")
 
 # =============================================================================
@@ -97,7 +97,7 @@ def evaluate_fd_baseline(model, n_episodes=20, dropout_steps=3):
     print("STEP 3: FD Baseline Under Dropout")
     print("="*70)
     
-    env = ContactDropoutEnv(dropout_steps=dropout_steps)
+    env = ContactDropoutEnv(dropout_duration=dropout_steps)
     
     rewards = []
     episode_lengths = []
@@ -381,7 +381,7 @@ def evaluate_f3jepa(jepa_model, sac_model, n_episodes=20, dropout_steps=3):
     print("STEP 5: F3-JEPA Under Dropout")
     print("="*70)
     
-    env = ContactDropoutEnv(dropout_steps=dropout_steps)
+    env = ContactDropoutEnv(dropout_duration=dropout_steps)
     controller = F3JEPAController(jepa_model, sac_model)
     
     rewards = []

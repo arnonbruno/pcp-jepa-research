@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-device = torch.device('cuda')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using: {device}")
 
 
@@ -46,8 +46,12 @@ class Policy(nn.Module):
     
     def forward(self, x, delta):
         """x, delta: (B,)"""
-        inp = torch.stack([x, delta], dim=1).unsqueeze(0)  # (1, B, 2)
-        return torch.tanh(self.net(inp)).squeeze(0)
+        if x.dim() == 0:
+            x = x.unsqueeze(0)
+        if delta.dim() == 0:
+            delta = delta.unsqueeze(0)
+        inp = torch.stack([x, delta], dim=-1)  # (B, 2)
+        return torch.tanh(self.net(inp)).squeeze(-1)
 
 
 def expert_action(x, v):
@@ -111,14 +115,14 @@ def train_policy(data, epochs=20):
     opt = torch.optim.Adam(policy.parameters(), lr=0.01)
     
     for epoch in range(epochs):
-        idx = torch.randperm(n)
+        idx = torch.randperm(n, device=device)
         for i in idx:
             x = X[i, 0]
             d = X[i, 1]
             a = Y[i]
             
             pred = policy(x, d)
-            loss = (pred - a) ** 2
+            loss = (pred - a).pow(2).mean()
             
             opt.zero_grad()
             loss.backward()

@@ -376,6 +376,7 @@ def experiment_3_impact_profiling(sac_model, seed=42):
     data = {
         'obs': [], 'obs_prev': [], 'action': [],
         'obs_next': [], 'obs_prev_next': [],
+        'episode_id': [], 'timestep': [],
         'phase': [],
     }
 
@@ -384,7 +385,7 @@ def experiment_3_impact_profiling(sac_model, seed=42):
         obs_prev = obs.copy()
         prev_height = obs[1]
 
-        for _ in range(1000):
+        for step in range(1000):
             action, _ = sac_model.predict(obs, deterministic=True)
             data['obs'].append(obs)
             data['obs_prev'].append(obs_prev)
@@ -393,6 +394,8 @@ def experiment_3_impact_profiling(sac_model, seed=42):
             obs_next, reward, term, trunc, info = env.step(action)
             data['obs_next'].append(obs_next)
             data['obs_prev_next'].append(obs)
+            data['episode_id'].append(ep)
+            data['timestep'].append(step)
 
             # Use proper MuJoCo contact semantics
             phase = 1 if info.get('contact_detected', False) else 0
@@ -403,7 +406,9 @@ def experiment_3_impact_profiling(sac_model, seed=42):
             if term or trunc:
                 break
 
-    phases = data['phase']
+    phases = np.array(data['phase'], dtype=np.int64)
+    episode_ids = np.array(data['episode_id'], dtype=np.int64)
+    timesteps = np.array(data['timestep'], dtype=np.int64)
     for k in data:
         if k != 'phase':
             data[k] = torch.tensor(np.array(data[k]), dtype=torch.float32, device=device)
@@ -430,11 +435,17 @@ def experiment_3_impact_profiling(sac_model, seed=42):
     with torch.no_grad():
         for i in range(0, n_test - n_rollout_steps):
             phase = phases[i]
+            start_ep = episode_ids[i]
+            start_t = timesteps[i]
             z = model.encode(data['obs'][i].unsqueeze(0), data['obs_prev'][i].unsqueeze(0), dt)
 
             for k in range(n_rollout_steps):
                 idx_k = i + k
                 if idx_k >= n_test:
+                    break
+                if episode_ids[idx_k] != start_ep:
+                    break
+                if timesteps[idx_k] != (start_t + k):
                     break
                 delta_z = model.predict_residual(z, data['action'][idx_k].unsqueeze(0))
                 z = z + delta_z

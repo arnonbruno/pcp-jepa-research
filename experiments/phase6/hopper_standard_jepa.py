@@ -34,7 +34,7 @@ from src.utils.training import train_standard_jepa, train_standard_jepa_multiste
 
 warnings.filterwarnings('ignore')
 
-device = torch.device('cuda')
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
 # =============================================================================
@@ -231,6 +231,7 @@ if __name__ == '__main__':
     
     # Oracle baseline
     env = gym.make('Hopper-v4')
+    train_dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.002
     obs, _ = env.reset(seed=42)
     oracle_reward = 0
     for _ in range(1000):
@@ -266,11 +267,29 @@ if __name__ == '__main__':
     
     # Phase 1: Single-step training
     print("\nPhase 1: Single-step prediction...")
-    jepa_model = train_standard_jepa(jepa_model, data, n_epochs=50, lambda_vel=10.0, lambda_pred=0.1)
+    jepa_model = train_standard_jepa(
+        jepa_model,
+        data,
+        dt=train_dt,
+        n_epochs=50,
+        lambda_vel=10.0,
+        lambda_pred=0.1,
+        device=device,
+        return_model=True,
+    )
     
     # Phase 2: Multi-step training
     print("\nPhase 2: Multi-step rollout...")
-    jepa_model = train_standard_jepa_multistep(jepa_model, data, n_epochs=50, n_rollout=3, lambda_vel=10.0, lambda_pred=0.1)
+    jepa_model = train_standard_jepa_multistep(
+        jepa_model,
+        data,
+        n_epochs=50,
+        n_rollout=3,
+        lambda_vel=10.0,
+        lambda_pred=0.1,
+        dt=train_dt,
+        device=device,
+    )
     
     # Test Standard Latent JEPA
     print("\n" + "="*70)

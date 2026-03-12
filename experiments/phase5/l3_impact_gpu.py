@@ -249,11 +249,11 @@ def evaluate(model, n_episodes, restitution, obs_noise, dropout, seed):
                 if dropout > 0 and np.random.rand() < dropout:
                     obs = obs * 0
                 
-                obs_t = torch.tensor([obs], dtype=torch.float32).to(device)
-                a_t = torch.tensor([[last_a]], dtype=torch.float32).to(device)
+                obs_t = torch.tensor(obs, dtype=torch.float32, device=device)
+                a_t = torch.tensor([last_a], dtype=torch.float32, device=device)
                 
                 z = model.encode(obs_t)
-                belief = model.gru_step(belief, z, a_t.squeeze())
+                belief = model.gru_step(belief, z, a_t)
                 
                 a = model.act(belief).item()
                 a = float(np.clip(a, -2.0, 2.0))

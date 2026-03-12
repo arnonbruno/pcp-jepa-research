@@ -223,27 +223,28 @@ def generate_dataset_split(
     all_data = {'train': [], 'val': [], 'test': []}
     
     for rest in restitution_values:
+        seed_offset = int(round(rest * 1000))
         # Split seeds
         train_data = generate_trajectories(
             n_episodes=n_train,
             restitution=rest,
             observation=observation,
             policy=policy,
-            seed=seed + rest * 1000
+            seed=int(seed + seed_offset)
         )
         val_data = generate_trajectories(
             n_episodes=n_val,
             restitution=rest,
             observation=observation,
             policy=policy,
-            seed=seed + rest * 2000
+            seed=int(seed + 2 * seed_offset)
         )
         test_data = generate_trajectories(
             n_episodes=n_test,
             restitution=rest,
             observation=observation,
             policy=policy,
-            seed=seed + rest * 3000
+            seed=int(seed + 3 * seed_offset)
         )
         
         all_data['train'].append(train_data)

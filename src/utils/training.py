@@ -2,11 +2,21 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 
+
+def _data_device(data):
+    obs = data.get('obs')
+    if isinstance(obs, torch.Tensor):
+        return obs.device
+    return torch.device('cpu')
+
+
 def train_standard_jepa(model, data, dt, n_epochs=100, lambda_vel=10.0, lambda_pred=0.1, device='cuda', return_model=False):
     """Train Standard Latent JEPA. Returns either (vel_loss, pred_loss) or the trained model."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        
+    data_device = _data_device(data)
+    model.train()
+
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     batch_size = 256
     n_samples = len(data['obs'])
@@ -14,7 +24,7 @@ def train_standard_jepa(model, data, dt, n_epochs=100, lambda_vel=10.0, lambda_p
     final_vel_losses, final_pred_losses = [], []
 
     for epoch in range(n_epochs):
-        idx = torch.randperm(n_samples, device=device)
+        idx = torch.randperm(n_samples, device=data_device)
         vel_losses, pred_losses = [], []
         
         total_loss = 0
@@ -69,19 +79,27 @@ def train_standard_jepa_multistep(model, data, n_epochs=100, n_rollout=3, lambda
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
         
+    data_device = _data_device(data)
+    model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     
     batch_size = 256
     n_samples = len(data['obs'])
     
+    has_episode_metadata = 'episode_id' in data and 'timestep' in data
+    episode_id = data.get('episode_id')
+    timestep = data.get('timestep')
+
     for epoch in range(n_epochs):
-        idx = torch.randperm(n_samples)
+        idx = torch.randperm(n_samples, device=data_device)
         total_loss = 0
         total_vel_loss = 0
         total_pred_loss = 0
         
-        for i in range(0, n_samples - n_rollout, batch_size):
+        for i in range(0, n_samples, batch_size):
             b = idx[i:i+batch_size]
+            if b.numel() == 0:
+                continue
             
             # Single-step prediction loss
             z_t = model.encode(data['obs'][b], data['obs_prev'][b], dt)
@@ -96,22 +114,45 @@ def train_standard_jepa_multistep(model, data, n_epochs=100, n_rollout=3, lambda
             loss_vel = F.mse_loss(v_pred, v_true)
             loss_pred = F.mse_loss(z_pred, z_target.detach())
             
-            # Multi-step rollout loss
-            loss_multistep = 0
+            # Multi-step rollout loss over contiguous in-episode transitions only.
+            loss_multistep = torch.tensor(0.0, device=z_t.device)
+            multistep_terms = 0
             z_rollout = z_t.clone()
-            for k in range(min(n_rollout, n_samples - i - batch_size)):
-                idx_k = b + k + 1
-                if idx_k.max() < n_samples:
-                    delta_z_k = model.predict_residual(z_rollout, data['action'][idx_k - 1])
-                    z_rollout = z_rollout + delta_z_k
-                    
+            if has_episode_metadata and n_rollout > 1:
+                start_ep = episode_id[b]
+                start_t = timestep[b]
+                for step_ahead in range(n_rollout):
+                    trans_idx = b + step_ahead
+                    valid = trans_idx < n_samples
+                    if not torch.any(valid):
+                        break
+                    safe_idx = trans_idx.clone()
+                    safe_idx[~valid] = 0
+                    valid = valid & (episode_id[safe_idx] == start_ep)
+                    valid = valid & (timestep[safe_idx] == (start_t + step_ahead))
+                    if not torch.any(valid):
+                        break
+
+                    z_valid = z_rollout[valid]
+                    idx_valid = safe_idx[valid]
+                    delta_z_k = model.predict_residual(z_valid, data['action'][idx_valid])
+                    z_next_valid = z_valid + delta_z_k
+
+                    z_rollout = z_rollout.clone()
+                    z_rollout[valid] = z_next_valid
+
                     z_target_k = model.encode_target(
-                        data['obs_next'][idx_k - 1], 
-                        data['obs_prev_next'][idx_k - 1], 
-                        dt
+                        data['obs_next'][idx_valid],
+                        data['obs_prev_next'][idx_valid],
+                        dt,
                     )
-                    loss_multistep += F.mse_loss(z_rollout, z_target_k.detach())
-            
+                    loss_multistep = loss_multistep + F.mse_loss(
+                        z_next_valid, z_target_k.detach()
+                    )
+                    multistep_terms += 1
+
+            if multistep_terms > 0:
+                loss_multistep = loss_multistep / multistep_terms
             loss = lambda_vel * loss_vel + lambda_pred * (loss_pred + 0.1 * loss_multistep)
             
             optimizer.zero_grad()
@@ -134,12 +175,14 @@ def train_pano(model, data, n_epochs=100, lr=1e-3, batch_size=256, device='cuda'
     """Train PANO velocity predictor."""
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
-        
+    data_device = _data_device(data)
+    model.train()
+
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     n_samples = len(data['obs'])
 
     for epoch in range(n_epochs):
-        idx = torch.randperm(n_samples, device=device)
+        idx = torch.randperm(n_samples, device=data_device)
         total_loss = 0
         n_batches = 0
 
@@ -179,12 +222,14 @@ def train_event_consistent_jepa(
     if isinstance(device, str):
         device = torch.device(device if torch.cuda.is_available() else 'cpu')
 
+    data_device = _data_device(data)
+    model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
     batch_size = 256
     n_samples = len(data['obs'])
 
     for epoch in range(n_epochs):
-        idx = torch.randperm(n_samples, device=device)
+        idx = torch.randperm(n_samples, device=data_device)
         total_loss = 0.0
         total_event = 0.0
         total_impulse = 0.0

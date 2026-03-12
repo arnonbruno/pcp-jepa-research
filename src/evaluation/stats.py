@@ -15,6 +15,12 @@ import json
 import os
 
 
+def _safe_std(values: np.ndarray) -> float:
+    if values.size <= 1:
+        return 0.0
+    return float(np.std(values, ddof=1))
+
+
 def welch_ttest(a: np.ndarray, b: np.ndarray) -> Dict[str, float]:
     """
     Welch's t-test (unequal variance) comparing two methods.
@@ -27,10 +33,13 @@ def welch_ttest(a: np.ndarray, b: np.ndarray) -> Dict[str, float]:
         Dictionary with t-statistic, p-value, and effect size
     """
     a, b = np.asarray(a, dtype=float), np.asarray(b, dtype=float)
+    if a.size < 2 or b.size < 2:
+        raise ValueError("Welch t-test requires at least 2 samples per group")
+
     t_stat, p_value = stats.ttest_ind(a, b, equal_var=False)
     
     # Cohen's d (effect size)
-    pooled_std = np.sqrt((np.var(a, ddof=1) + np.var(b, ddof=1)) / 2)
+    pooled_std = np.sqrt((np.var(a, ddof=1) + np.var(b, ddof=1)) / 2.0)
     cohens_d = (np.mean(a) - np.mean(b)) / pooled_std if pooled_std > 0 else 0.0
     
     return {
@@ -55,6 +64,13 @@ def bootstrap_ci(
         (mean, ci_lower, ci_upper)
     """
     data = np.asarray(data, dtype=float)
+    if data.size == 0:
+        raise ValueError("bootstrap_ci requires at least one sample")
+    if not (0.0 < confidence < 1.0):
+        raise ValueError("confidence must be in (0, 1)")
+    if n_bootstrap <= 0:
+        raise ValueError("n_bootstrap must be > 0")
+
     rng = np.random.RandomState(seed)
     
     boot_means = np.array([
@@ -78,13 +94,15 @@ def summarize_results(
     Compute summary statistics for a method's results.
     """
     rewards = np.asarray(rewards, dtype=float)
+    if rewards.size == 0:
+        raise ValueError("summarize_results requires non-empty rewards")
     mean, ci_lo, ci_hi = bootstrap_ci(rewards)
     
     summary = {
         'method': method_name,
         'n_episodes': len(rewards),
         'reward_mean': mean,
-        'reward_std': float(np.std(rewards, ddof=1)),
+        'reward_std': _safe_std(rewards),
         'reward_median': float(np.median(rewards)),
         'reward_ci_95_lower': ci_lo,
         'reward_ci_95_upper': ci_hi,
@@ -95,8 +113,12 @@ def summarize_results(
     
     if velocity_errors is not None:
         velocity_errors = np.asarray(velocity_errors, dtype=float)
+        if velocity_errors.size == 0:
+            summary['velocity_error_mean'] = 0.0
+            summary['velocity_error_std'] = 0.0
+            return summary
         summary['velocity_error_mean'] = float(np.mean(velocity_errors))
-        summary['velocity_error_std'] = float(np.std(velocity_errors, ddof=1))
+        summary['velocity_error_std'] = _safe_std(velocity_errors)
     
     return summary
 
@@ -122,7 +144,12 @@ def compare_methods(
     test = welch_ttest(rewards_a, rewards_b)
     
     improvement = (results_a['reward_mean'] - results_b['reward_mean'])
-    pct_improvement = improvement / abs(results_b['reward_mean']) * 100 if results_b['reward_mean'] != 0 else float('inf')
+    baseline_mean = float(results_b['reward_mean'])
+    pct_improvement = (
+        improvement / abs(baseline_mean) * 100.0
+        if not np.isclose(baseline_mean, 0.0)
+        else float('nan')
+    )
     
     return {
         'label': label,
