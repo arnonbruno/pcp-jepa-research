@@ -18,6 +18,8 @@ import numpy as np
 import gymnasium as gym
 from stable_baselines3 import SAC
 import warnings
+from src.envs.contact_dropout import ContactDropoutEnv, CriticalDropoutEnv
+
 warnings.filterwarnings('ignore')
 
 device = torch.device('cuda')
@@ -37,59 +39,6 @@ def get_oracle():
 # CRITICAL DROPOUT ENV
 # =============================================================================
 
-class CriticalDropoutEnv:
-    def __init__(self, dropout_duration=5, velocity_threshold=0.1):
-        self.env = gym.make('Hopper-v4')
-        self.dropout_duration = dropout_duration
-        self.velocity_threshold = velocity_threshold
-        self.obs_prev = None
-        self.frozen_obs = None
-        self.dropout_countdown = 0
-        self.step_count = 0
-        
-    def reset(self):
-        obs, _ = self.env.reset()
-        self.obs_prev = obs.copy()
-        self.frozen_obs = obs.copy()
-        self.dropout_countdown = 0
-        self.step_count = 0
-        return obs, {}
-    
-    def step(self, action):
-        obs, reward, term, trunc, info = self.env.step(action)
-        self.step_count += 1
-        
-        if self.obs_prev is not None and self.dropout_countdown == 0:
-            velocity = obs - self.obs_prev
-            accel = np.abs(velocity).max()
-            
-            if accel > self.velocity_threshold and self.step_count > 10:
-                self.dropout_countdown = self.dropout_duration
-                self.frozen_obs = obs.copy()
-        
-        info['true_obs'] = obs.copy()
-        info['dropout_active'] = self.dropout_countdown > 0
-        info['dropout_step'] = self.dropout_duration - self.dropout_countdown
-        
-        if self.dropout_countdown > 0:
-            obs_return = self.frozen_obs.copy()
-            self.dropout_countdown -= 1
-        else:
-            obs_return = obs.copy()
-            self.obs_prev = obs.copy()
-        
-        return obs_return, reward, term, trunc, info
-    
-    @property
-    def observation_space(self):
-        return self.env.observation_space
-    
-    @property
-    def action_space(self):
-        return self.env.action_space
-    
-    def close(self):
-        self.env.close()
 
 # =============================================================================
 # F3-JEPA v3 - STABLE VELOCITY PREDICTOR

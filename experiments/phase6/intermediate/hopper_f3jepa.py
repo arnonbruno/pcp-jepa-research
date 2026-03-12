@@ -21,6 +21,8 @@ import gymnasium as gym
 from stable_baselines3 import SAC
 from stable_baselines3.common.callbacks import EvalCallback
 import warnings
+from src.envs.contact_dropout import ContactDropoutEnv, CriticalDropoutEnv
+
 warnings.filterwarnings('ignore')
 
 device = torch.device('cuda')
@@ -81,79 +83,6 @@ def train_sac_oracle(total_timesteps=100000, save_path="hopper_sac.zip"):
 # STEP 2: CONTACT-TRIGGERED DROPOUT ENVIRONMENT
 # =============================================================================
 
-class ContactDropoutEnv:
-    """
-    Hopper environment with contact-triggered observation dropout.
-    
-    When foot is near ground (within threshold), freeze observations
-    for N consecutive steps.
-    """
-    
-    def __init__(self, dropout_steps=3, foot_threshold=0.05):
-        self.env = gym.make('Hopper-v4')
-        self.dropout_steps = dropout_steps
-        self.foot_threshold = foot_threshold
-        
-        # State for dropout
-        self.frozen_obs = None
-        self.dropout_countdown = 0
-        
-        # Hopper-v4 observation: 11 dims
-        # [x, z, theta, 4 joint angles, 6 velocities]
-        # Foot height is NOT directly in obs - need to track
-        
-    def reset(self):
-        obs, info = self.env.reset()
-        self.frozen_obs = obs.copy()
-        self.dropout_countdown = 0
-        return obs, info
-    
-    def get_foot_height(self, obs):
-        """
-        Estimate foot height from observation.
-        Hopper foot is at end of leg chain.
-        
-        For Hopper-v4, we approximate foot height based on
-        body height and leg configuration.
-        """
-        # Simplified: use z-position (index 1) as proxy
-        # In reality, need forward kinematics
-        return obs[1]  # z-position
-    
-    def step(self, action):
-        obs, reward, term, trunc, info = self.env.step(action)
-        
-        # Check for contact (foot near ground)
-        foot_h = self.get_foot_height(obs)
-        
-        if foot_h < self.foot_threshold:
-            # Trigger dropout
-            self.dropout_countdown = self.dropout_steps
-            self.frozen_obs = obs.copy()
-        
-        # Apply dropout
-        if self.dropout_countdown > 0:
-            obs_return = self.frozen_obs.copy()
-            self.dropout_countdown -= 1
-        else:
-            obs_return = obs
-        
-        # Record dropout state in info
-        info['dropout_active'] = self.dropout_countdown > 0
-        info['true_obs'] = obs.copy()
-        
-        return obs_return, reward, term, trunc, info
-    
-    @property
-    def observation_space(self):
-        return self.env.observation_space
-    
-    @property
-    def action_space(self):
-        return self.env.action_space
-    
-    def close(self):
-        self.env.close()
 
 # =============================================================================
 # STEP 3: FD BASELINE UNDER DROPOUT

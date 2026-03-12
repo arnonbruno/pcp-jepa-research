@@ -15,6 +15,9 @@ import numpy as np
 import gymnasium as gym
 from stable_baselines3 import SAC
 import warnings
+from src.envs.contact_dropout import ContactDropoutEnv, CriticalDropoutEnv
+from src.utils.data import generate_jepa_data_episodes as generate_data
+
 warnings.filterwarnings('ignore')
 
 device = torch.device('cuda')
@@ -34,60 +37,6 @@ def get_oracle():
 # CRITICAL DROPOUT ENV
 # =============================================================================
 
-class CriticalDropoutEnv:
-    def __init__(self, dropout_duration=5, velocity_threshold=0.1):
-        self.env = gym.make('Hopper-v4')
-        self.dropout_duration = dropout_duration
-        self.velocity_threshold = velocity_threshold
-        self.obs_prev = None
-        self.frozen_obs = None
-        self.dropout_countdown = 0
-        self.step_count = 0
-        
-    def reset(self):
-        obs, _ = self.env.reset()
-        self.obs_prev = obs.copy()
-        self.frozen_obs = obs.copy()
-        self.dropout_countdown = 0
-        self.step_count = 0
-        return obs, {}
-    
-    def step(self, action):
-        obs, reward, term, trunc, info = self.env.step(action)
-        self.step_count += 1
-        
-        if self.obs_prev is not None and self.dropout_countdown == 0:
-            velocity = obs - self.obs_prev
-            accel = np.abs(velocity).max()
-            
-            if accel > self.velocity_threshold and self.step_count > 10:
-                self.dropout_countdown = self.dropout_duration
-                self.frozen_obs = obs.copy()
-        
-        info['true_obs'] = obs.copy()
-        info['dropout_active'] = self.dropout_countdown > 0
-        info['dropout_step'] = self.dropout_duration - self.dropout_countdown
-        info['frozen_obs'] = self.frozen_obs.copy()
-        
-        if self.dropout_countdown > 0:
-            obs_return = self.frozen_obs.copy()
-            self.dropout_countdown -= 1
-        else:
-            obs_return = obs.copy()
-            self.obs_prev = obs.copy()
-        
-        return obs_return, reward, term, trunc, info
-    
-    @property
-    def observation_space(self):
-        return self.env.observation_space
-    
-    @property
-    def action_space(self):
-        return self.env.action_space
-    
-    def close(self):
-        self.env.close()
 
 # =============================================================================
 # F3-JEPA v5.1
@@ -144,39 +93,6 @@ class F3JEPAHopperV51(nn.Module):
         for tp, ep in zip(self.target_encoder.parameters(), self.encoder.parameters()):
             tp.data.mul_(tau).add_(ep.data, alpha=1 - tau)
 
-def generate_data(sac_model, n_episodes=200):
-    env = gym.make('Hopper-v4')
-    data = {'obs': [], 'obs_prev': [], 'action': [], 'obs_next': [], 'obs_prev_next': []}
-    
-    for ep in range(n_episodes):
-        obs, _ = env.reset()
-        obs_prev = obs.copy()
-        
-        for step in range(1000):
-            action, _ = sac_model.predict(obs, deterministic=True)
-            
-            data['obs'].append(obs)
-            data['obs_prev'].append(obs_prev)
-            data['action'].append(action)
-            
-            obs_next, _, term, trunc, _ = env.step(action)
-            
-            data['obs_next'].append(obs_next)
-            data['obs_prev_next'].append(obs)
-            
-            obs_prev = obs.copy()
-            obs = obs_next
-            
-            if term or trunc:
-                break
-    
-    env.close()
-    
-    for k in data:
-        data[k] = torch.tensor(np.array(data[k]), dtype=torch.float32, device=device)
-    
-    print(f"Generated {len(data['obs'])} transitions")
-    return data
 
 def train_f3jepa(model, data, n_epochs=100, lambda_vel=10.0, lambda_pred=0.1, dt=0.002):
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)

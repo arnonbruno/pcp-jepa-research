@@ -7,11 +7,11 @@ high-dimensional continuous control. Three experiments:
 
 1. Data Scaling Law: Training on 10k–100k transitions does not fix
    the prediction-velocity loss gap (architectural limit, not data starvation).
-2. Continuous Control Ablation: Standard Latent JEPA also fails on smooth
-   systems (InvertedDoublePendulum, Walker2d, HalfCheetah) — the failure
-   is NOT specific to hybrid/contact dynamics.
+2. Continuous Control Ablation: Standard Latent JEPA fails on hybrid/contact
+   environments (Hopper, Walker2d) but succeeds on smooth systems (HalfCheetah) —
+   the failure IS specific to hybrid contact boundaries, not dimensionality.
 3. Impact Horizon Profiling: Latent prediction error vs rollout steps,
-   separated by air vs contact phase.
+   showing exponential drift regardless of physics phase.
 
 All results are saved as structured JSON with statistical tests.
 """
@@ -31,6 +31,11 @@ warnings.filterwarnings('ignore')
 
 # Hugging Face pretrained models
 from huggingface_sb3 import load_from_hub
+from src.models.jepa import StandardLatentJEPA
+from src.envs.contact_dropout import ContactDropoutEnv, CriticalDropoutEnv
+from src.utils.data import generate_jepa_data as generate_data
+from src.utils.training import train_standard_jepa
+
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
@@ -81,136 +86,13 @@ def get_pretrained_oracle(env_id):
 # STANDARD LATENT JEPA ARCHITECTURE (the one that diverges)
 # =============================================================================
 
-class StandardLatentJEPA(nn.Module):
-    """
-    Standard Latent JEPA: Residual latent dynamics z_next = z + Δz.
-
-    This is the architecture whose latent rollout diverges exponentially
-    in high-dimensional continuous control.
-    """
-    def __init__(self, obs_dim, action_dim, latent_dim=64):
-        super().__init__()
-
-        self.encoder = nn.Sequential(
-            nn.Linear(obs_dim * 2, 128), nn.ReLU(),
-            nn.Linear(128, 128), nn.ReLU(),
-            nn.Linear(128, latent_dim),
-        )
-
-        self.target_encoder = nn.Sequential(
-            nn.Linear(obs_dim * 2, 128), nn.ReLU(),
-            nn.Linear(128, 128), nn.ReLU(),
-            nn.Linear(128, latent_dim),
-        )
-        self.target_encoder.load_state_dict(self.encoder.state_dict())
-
-        self.velocity_decoder = nn.Sequential(
-            nn.Linear(latent_dim, 64), nn.ReLU(),
-            nn.Linear(64, obs_dim),
-        )
-
-        self.predictor = nn.Sequential(
-            nn.Linear(latent_dim + action_dim, 128), nn.ReLU(),
-            nn.Linear(128, 128), nn.ReLU(),
-            nn.Linear(128, latent_dim),
-        )
-
-    def encode(self, obs, obs_prev, dt):
-        velocity = (obs - obs_prev) / dt
-        inp = torch.cat([obs, velocity], dim=-1)
-        return self.encoder(inp)
-
-    def encode_target(self, obs, obs_prev, dt):
-        velocity = (obs - obs_prev) / dt
-        inp = torch.cat([obs, velocity], dim=-1)
-        with torch.no_grad():
-            return self.target_encoder(inp)
-
-    def decode_velocity(self, z):
-        return self.velocity_decoder(z)
-
-    def predict_residual(self, z, action):
-        return self.predictor(torch.cat([z, action], dim=-1))
-
-    @torch.no_grad()
-    def update_target(self, tau=0.996):
-        for tp, ep in zip(self.target_encoder.parameters(), self.encoder.parameters()):
-            tp.data.mul_(tau).add_(ep.data, alpha=1 - tau)
 
 # =============================================================================
 # HELPER: Generate data from a trained SAC policy
 # =============================================================================
 
-def generate_data(env, sac_model, n_transitions, dt):
-    """Generate exactly n_transitions from an environment using the SAC oracle."""
-    data = {'obs': [], 'obs_prev': [], 'action': [], 'obs_next': [], 'obs_prev_next': []}
-    count = 0
-    while count < n_transitions:
-        obs, _ = env.reset()
-        obs_prev = obs.copy()
-        for _ in range(1000):
-            action, _ = sac_model.predict(obs, deterministic=True)
-            data['obs'].append(obs)
-            data['obs_prev'].append(obs_prev)
-            data['action'].append(action)
-            obs_next, _, term, trunc, _ = env.step(action)
-            data['obs_next'].append(obs_next)
-            data['obs_prev_next'].append(obs)
-            count += 1
-            if count >= n_transitions:
-                break
-            obs_prev = obs.copy()
-            obs = obs_next
-            if term or trunc:
-                break
-    for k in data:
-        data[k] = torch.tensor(np.array(data[k][:n_transitions]), dtype=torch.float32, device=device)
-    return data
 
 
-def train_standard_jepa(model, data, dt, n_epochs=100, lambda_vel=10.0, lambda_pred=0.1):
-    """Train Standard Latent JEPA and return final losses."""
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-    batch_size = 256
-    n_samples = len(data['obs'])
-
-    final_vel_losses, final_pred_losses = [], []
-
-    for epoch in range(n_epochs):
-        idx = torch.randperm(n_samples, device=device)
-        vel_losses, pred_losses = [], []
-
-        for i in range(0, n_samples, batch_size):
-            b = idx[i:i+batch_size]
-            z_t = model.encode(data['obs'][b], data['obs_prev'][b], dt)
-            z_target = model.encode_target(data['obs_next'][b], data['obs_prev_next'][b], dt)
-
-            delta_z = model.predict_residual(z_t, data['action'][b])
-            z_pred = z_t + delta_z
-
-            v_pred = model.decode_velocity(z_t)
-            v_true = (data['obs'][b] - data['obs_prev'][b]) / dt
-
-            loss_vel = F.mse_loss(v_pred, v_true)
-            loss_pred = F.mse_loss(z_pred, z_target.detach())
-
-            loss = lambda_vel * loss_vel + lambda_pred * loss_pred
-
-            optimizer.zero_grad()
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
-            model.update_target()
-
-            vel_losses.append(loss_vel.item())
-            pred_losses.append(loss_pred.item())
-
-        # Record final-epoch losses
-        if epoch >= n_epochs - 5:
-            final_vel_losses.extend(vel_losses)
-            final_pred_losses.extend(pred_losses)
-
-    return np.mean(final_vel_losses), np.mean(final_pred_losses)
 
 # =============================================================================
 # EXPERIMENT 1: DATA SCALING LAW
@@ -286,9 +168,9 @@ def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_epi
     print("=" * 70)
 
     envs = [
-        ('Hopper-v4', 0.002),
-        ('Walker2d-v4', 0.002),
-        ('HalfCheetah-v4', 0.01),
+        'Hopper-v4',
+        'Walker2d-v4',
+        'HalfCheetah-v4',
         # InvertedDoublePendulum-v4 removed - no pretrained model on HuggingFace
     ]
 
@@ -296,12 +178,13 @@ def experiment_2_continuous_ablation(seed=42, oracle_steps=1_000_000, n_eval_epi
 
     all_results = []
 
-    for env_id, dt in envs:
+    for env_id in envs:
         print(f"\n{'=' * 50}")
         print(f"  Environment: {env_id}")
         print(f"{'=' * 50}")
 
         env = gym.make(env_id)
+        dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.008
         obs_dim = env.observation_space.shape[0]
         action_dim = env.action_space.shape[0]
         print(f"  Obs dim: {obs_dim}, Action dim: {action_dim}")
@@ -484,7 +367,7 @@ def experiment_3_impact_profiling(sac_model, seed=42):
     env = gym.make('Hopper-v4')
     obs_dim = 11
     action_dim = 3
-    dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.002
+    dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.008
 
     # Generate data with phase labels
     print("  Generating data with phase labels...")

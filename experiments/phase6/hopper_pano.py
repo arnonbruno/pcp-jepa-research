@@ -29,6 +29,16 @@ from huggingface_sb3 import load_from_hub
 
 # Add project root to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.models.pano import PANOVelocityPredictor
+from src.models.ekf import EKFEstimator
+from src.envs.contact_dropout import ContactDropoutEnv
+from src.utils.data import generate_pano_data as generate_training_data
+from src.utils.training import train_pano
+from src.models.pano import PANOVelocityPredictor
+from src.models.ekf import EKFEstimator
+from src.envs.contact_dropout import ContactDropoutEnv
+from src.utils.data import generate_pano_data as generate_training_data
+from src.utils.training import train_pano
 from src.evaluation.stats import summarize_results, compare_methods, save_results, welch_ttest
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -101,224 +111,23 @@ def train_oracle(model_path='hopper_sac.zip', total_timesteps=1_000_000, seed=42
 # CONTACT-TRIGGERED DROPOUT ENVIRONMENT
 # =============================================================================
 
-class ContactDropoutEnv:
-    """
-    Wrapper that triggers sensor dropout when large state changes are detected
-    (proxy for contact events). During dropout, observations are frozen.
-    """
-    def __init__(self, env_id='Hopper-v4', dropout_duration=5, velocity_threshold=0.1):
-        self.env = gym.make(env_id)
-        self.dropout_duration = dropout_duration
-        self.velocity_threshold = velocity_threshold
-        self.obs_prev = None
-        self.frozen_obs = None
-        self.dropout_countdown = 0
-        self.step_count = 0
-
-    def reset(self, seed=None):
-        obs, info = self.env.reset(seed=seed)
-        self.obs_prev = obs.copy()
-        self.frozen_obs = obs.copy()
-        self.dropout_countdown = 0
-        self.step_count = 0
-        return obs, info
-
-    def step(self, action):
-        obs, reward, term, trunc, info = self.env.step(action)
-        self.step_count += 1
-
-        # Trigger dropout on large state changes (contact proxy)
-        if self.obs_prev is not None and self.dropout_countdown == 0:
-            delta = np.abs(obs - self.obs_prev).max()
-            if delta > self.velocity_threshold and self.step_count > 10:
-                self.dropout_countdown = self.dropout_duration
-                self.frozen_obs = obs.copy()
-
-        info['true_obs'] = obs.copy()
-        info['dropout_active'] = self.dropout_countdown > 0
-        info['dropout_step'] = self.dropout_duration - self.dropout_countdown
-        info['frozen_obs'] = self.frozen_obs.copy()
-
-        if self.dropout_countdown > 0:
-            obs_return = self.frozen_obs.copy()
-            self.dropout_countdown -= 1
-        else:
-            obs_return = obs.copy()
-            self.obs_prev = obs.copy()
-
-        return obs_return, reward, term, trunc, info
-
-    @property
-    def observation_space(self):
-        return self.env.observation_space
-
-    @property
-    def action_space(self):
-        return self.env.action_space
-
-    def close(self):
-        self.env.close()
 
 # =============================================================================
 # PANO: PHYSICS-ANCHORED NEURAL OBSERVER
 # =============================================================================
 
-class PANOVelocityPredictor(nn.Module):
-    """
-    PANO velocity predictor: learns to estimate state velocity from
-    current observation + action history.
-
-    During dropout: obs_est = frozen_obs + predicted_velocity * dt * steps
-    """
-    def __init__(self, obs_dim, action_dim, history_len=5, hidden_dim=128):
-        super().__init__()
-        self.history_len = history_len
-        input_dim = obs_dim + history_len * action_dim
-
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim), nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
-            nn.Linear(hidden_dim, 64), nn.ReLU(),
-            nn.Linear(64, obs_dim),
-        )
-
-    def forward(self, obs, action_history):
-        if action_history.dim() == 2:
-            action_history = action_history.unsqueeze(0)
-        action_flat = action_history.reshape(action_history.shape[0], -1)
-        inp = torch.cat([obs, action_flat], dim=-1)
-        return self.net(inp)
 
 # =============================================================================
 # EKF BASELINE (Extended Kalman Filter)
 # =============================================================================
 
-class EKFEstimator:
-    """
-    Extended Kalman Filter for velocity estimation under dropout.
-
-    State: [obs] (11D for Hopper)
-    Model: x_{t+1} = x_t + v_t * dt  (constant velocity assumption)
-    Measurement: x_t (when available)
-    """
-    def __init__(self, obs_dim=11, dt=None, process_noise=1.0, measurement_noise=0.01):
-        self.obs_dim = obs_dim
-        self.dt = dt
-        # State = [position, velocity] in obs_dim
-        self.state_dim = obs_dim * 2
-
-        # State estimate: [obs, velocity]
-        self.x = np.zeros(self.state_dim)
-        # Covariance
-        self.P = np.eye(self.state_dim) * 1.0
-        # Process noise
-        self.Q = np.eye(self.state_dim) * process_noise
-        self.Q[:obs_dim, :obs_dim] *= 0.01  # position evolves slowly
-        self.Q[obs_dim:, obs_dim:] *= 1.0   # velocity uncertain
-        # Measurement noise
-        self.R = np.eye(obs_dim) * measurement_noise
-        # Measurement matrix: we observe position only
-        self.H = np.zeros((obs_dim, self.state_dim))
-        self.H[:obs_dim, :obs_dim] = np.eye(obs_dim)
-
-    def reset(self, obs):
-        self.x = np.zeros(self.state_dim)
-        self.x[:self.obs_dim] = obs
-        self.x[self.obs_dim:] = 0.0  # zero initial velocity
-        self.P = np.eye(self.state_dim) * 1.0
-
-    def predict(self):
-        """Prediction step (constant velocity model)."""
-        # State transition: [x, v] -> [x + v*dt, v]
-        F = np.eye(self.state_dim)
-        F[:self.obs_dim, self.obs_dim:] = np.eye(self.obs_dim) * self.dt
-
-        self.x = F @ self.x
-        self.P = F @ self.P @ F.T + self.Q
-
-    def update(self, obs):
-        """Measurement update (when observation is available)."""
-        y = obs - self.H @ self.x  # Innovation
-        S = self.H @ self.P @ self.H.T + self.R  # Innovation covariance
-        K = self.P @ self.H.T @ np.linalg.inv(S)  # Kalman gain
-
-        self.x = self.x + K @ y
-        self.P = (np.eye(self.state_dim) - K @ self.H) @ self.P
-
-    def get_obs_estimate(self):
-        return self.x[:self.obs_dim]
-
-    def get_velocity_estimate(self):
-        return self.x[self.obs_dim:]
 
 # =============================================================================
 # DATA GENERATION AND TRAINING
 # =============================================================================
 
-def generate_training_data(sac_model, n_episodes=300, history_len=5, env_id='Hopper-v4'):
-    """Generate training data for PANO velocity predictor."""
-    env = gym.make(env_id)
-    obs_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-
-    data = {'obs': [], 'action_history': [], 'velocity': []}
-    dt = env.unwrapped.dt if hasattr(env.unwrapped, 'dt') else 0.002
-
-    for ep in range(n_episodes):
-        obs, _ = env.reset()
-        obs_prev = obs.copy()
-        action_history = [np.zeros(action_dim) for _ in range(history_len)]
-
-        for step in range(1000):
-            action, _ = sac_model.predict(obs, deterministic=True)
-            action_history.pop(0)
-            action_history.append(action.copy())
-
-            obs_next, _, term, trunc, _ = env.step(action)
-            velocity = (obs - obs_prev) / dt
-
-            data['obs'].append(obs.copy())
-            data['action_history'].append(np.array(action_history))
-            data['velocity'].append(velocity)
-
-            obs_prev = obs.copy()
-            obs = obs_next
-            if term or trunc:
-                break
-
-    env.close()
-    for k in data:
-        data[k] = torch.tensor(np.array(data[k]), dtype=torch.float32, device=device)
-
-    print(f"Generated {len(data['obs'])} transitions from {n_episodes} episodes")
-    return data
 
 
-def train_pano(model, data, n_epochs=100, lr=1e-3, batch_size=256):
-    """Train PANO velocity predictor."""
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    n_samples = len(data['obs'])
-
-    for epoch in range(n_epochs):
-        idx = torch.randperm(n_samples, device=device)
-        total_loss = 0
-        n_batches = 0
-
-        for i in range(0, n_samples, batch_size):
-            b = idx[i:i+batch_size]
-            v_pred = model(data['obs'][b], data['action_history'][b])
-            loss = F.mse_loss(v_pred, data['velocity'][b])
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
-            n_batches += 1
-
-        if (epoch + 1) % 25 == 0:
-            print(f"  PANO training epoch {epoch+1}/{n_epochs}: loss={total_loss/n_batches:.4f}")
-
-    return model
 
 # =============================================================================
 # EVALUATION METHODS
@@ -461,7 +270,7 @@ def eval_pano(sac_model, velocity_model, n_episodes=100, dropout_duration=5,
 def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
                    oracle_path='hopper_sac.zip', oracle_steps=1_000_000,
                    results_dir='../../results', seed=42, retrain_oracle=False,
-                   use_pretrained=True):
+                   use_pretrained=True, train_episodes=300, train_epochs=100):
     """Run full PANO experiment with all baselines and statistical tests."""
 
     np.random.seed(seed)
@@ -493,9 +302,9 @@ def run_experiment(n_episodes=100, dropout_duration=5, velocity_threshold=0.1,
     print("\n[1/5] Training PANO velocity predictor...")
     obs_dim = 11
     action_dim = 3
-    data = generate_training_data(sac_model, n_episodes=300, history_len=5)
+    data = generate_training_data(sac_model, n_episodes=train_episodes, history_len=5)
     pano_model = PANOVelocityPredictor(obs_dim, action_dim, history_len=5).to(device)
-    pano_model = train_pano(pano_model, data, n_epochs=100)
+    pano_model = train_pano(pano_model, data, n_epochs=train_epochs)
 
     # --- Evaluate all methods ---
     print(f"\n[2/5] Evaluating Oracle (no dropout, {n_episodes} episodes)...")
@@ -593,6 +402,8 @@ if __name__ == '__main__':
     parser.add_argument('--results-dir', type=str, default='../../results/phase6')
     parser.add_argument('--retrain-oracle', action='store_true',
                         help='Force retrain oracle even if hopper_sac.zip exists')
+    parser.add_argument('--train-episodes', type=int, default=300)
+    parser.add_argument('--train-epochs', type=int, default=100)
     args = parser.parse_args()
 
     run_experiment(
@@ -602,4 +413,6 @@ if __name__ == '__main__':
         results_dir=args.results_dir,
         seed=args.seed,
         retrain_oracle=args.retrain_oracle,
+        train_episodes=args.train_episodes,
+        train_epochs=args.train_epochs,
     )
