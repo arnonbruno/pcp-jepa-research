@@ -20,10 +20,14 @@ src/
 └── utils/            # Helper functions
 
 results/
-└── phase6/
-    ├── hopper_pano_results.json       # Main PANO results (100 episodes)
-    ├── sota_baselines_results.json    # RSSM/TOLD baselines (100 episodes)
-    └── figure*.pdf                    # Publication figures
+├── phase6/                          # Primary Hopper bundle (100 eps / method)
+│   ├── hopper_pano_results.json     # PANO vs baselines
+│   ├── sota_baselines_results.json  # Simplified RSSM/TOLD
+│   ├── bulletproof_results.json     # Multi-env latent JEPA rollout (seed 42)
+│   └── figure*.pdf
+└── neurips/                         # Multi-seed logs: Hopper, Walker2d, Ant (PANO + SOTA per seed)
+    ├── aggregated_summary.json      # Aggregated stats (Hopper-v4, Walker2d-v4)
+    └── *.json                       # Per-env per-seed runs (see filenames)
 ```
 
 ## Quick Start
@@ -50,9 +54,9 @@ Using pretrained SAC experts from RL Baselines3 Zoo (HuggingFace):
 | EKF Baseline | 93.3 ± 45.1 | [85, 102] | -79.7% | 1.2e-20 | -1.65 |
 | Simplified RSSM | 46.3 ± 31.0 | [41, 53] | -90.0% | 7.3e-24 | -1.88 |
 
-### Key Finding 1: PANO Beats Oracle (+7.6%)
+### Key Finding 1: PANO vs Oracle (overlapping uncertainty)
 
-PANO achieves *higher* reward than the oracle (no dropout). This unexpected result occurs because velocity prediction during dropout provides a regularizing effect that improves policy robustness during contact events.
+PANO has a **higher mean** return than the oracle (+7.6% on this run), but the **95% confidence intervals overlap** (PANO [1126, 1282] vs Oracle [1106, 1132]), so this should be read as **suggestive**, not as a claim that PANO strictly dominates full observability. A plausible explanation—if the gap is real—is that velocity prediction during dropout acts like mild smoothing at contact; this remains hypothesis-level without tighter intervals or more seeds.
 
 ### Key Finding 2: Standard World Models Fail Catastrophically
 
@@ -79,15 +83,17 @@ This proves the pathology is localized to impact boundaries, not accumulated ove
 
 ---
 
-### Multi-Environment Ablation: Hybrid vs Smooth Systems
+### Multi-Environment Ablation: Latent JEPA rollout (bulletproof, seed 42)
 
-| Environment | Contact Type | Oracle | JEPA | Baseline | p-value | Outcome |
-|:------------|:-------------|:-------|:-----|:---------|:--------|:--------|
-| Hopper-v4 | Harsh hybrid impacts | 1109.3 | 241.2 | 361.2 | **0.0065** | JEPA **FAILS** |
-| Walker2d-v4 | Bipedal impacts | 3782.8 | 222.2 | 175.8 | 0.369 | JEPA matches baseline |
-| HalfCheetah-v4 | Smooth rolling contacts | 9408.7 | **586.5** | 207.2 | **p < 0.0001** | JEPA **SUCCEEDS** |
+**Standard latent JEPA rollout** via `StandardLatentJEPA` in `experiments/phase6/bulletproof_negative.py` (not PANO; not the simplified RSSM/TOLD scripts used in the main Hopper table). Source: `results/phase6/bulletproof_results.json`.
 
-**Interpretation:** Latent rollout brittleness is environment-dependent, with clear failure on contact-rich Hopper.
+| Environment | Contact Type | Oracle | Latent JEPA rollout | Frozen | p (latent vs frozen) | Outcome |
+|:------------|:-------------|:-------|:--------------------|:-------|:---------------------|:--------|
+| Hopper-v4 | Harsh hybrid impacts | 1109.3 | 241.2 | 361.2 | **0.0065** | **Fails** (significantly below frozen) |
+| Walker2d-v4 | Bipedal impacts | 3782.8 | 222.2 | 175.8 | 0.369 | **Inconclusive** (not significant vs frozen; both far below oracle) |
+| HalfCheetah-v4 | Smooth rolling contacts | 9408.7 | **586.5** | 207.2 | **p < 0.0001** | **Improves over frozen** |
+
+**Interpretation:** Latent JEPA rollout is strongly harmful on Hopper, **does not show a reliable gain over frozen on Walker2d** under this test (high variance, p≈0.37), and helps on HalfCheetah. For **PANO** on Walker2d (multi-seed), see `results/neurips/aggregated_summary.json`—mean reward is much higher than latent JEPA here, but PANO is still far below oracle and **not significantly above frozen** on return (p≈0.46 across seeds in that aggregate).
 
 ---
 
@@ -111,7 +117,7 @@ Prediction error grows exponentially regardless of physics phase:
 
 2. **Constructive Solution:** PANO achieves +160.9% improvement over frozen baseline (p=7.9e-33, d=2.07), demonstrating that observation-space estimation is the correct abstraction level for contact-rich robotics.
 
-3. **Oracle Beaten:** PANO exceeds oracle performance (+7.6%), suggesting velocity prediction provides beneficial regularization during contact events.
+3. **Oracle comparison (cautious):** PANO’s mean return is above oracle on the main Hopper table, but **CIs overlap**; treat as exploratory rather than “beats oracle.”
 
 4. **EKF Inadequacy:** Classical filtering approaches fail (-80%) because contact dynamics violate constant-velocity assumptions.
 
@@ -151,10 +157,10 @@ All experiments complete in ~15 minutes with pretrained HuggingFace models.
 ## Citation
 
 ```bibtex
-@inproceedings{pcp_jepa_2026,
+@misc{pcp_jepa_2026,
   title={Latent Rollout Under Contact-Triggered Dropout: A Negative Result and a Simple Solution},
   author={Santos, Bruno},
-  booktitle={NeurIPS},
-  year={2026}
+  year={2026},
+  note={Preprint; submitted to NeurIPS 2026}
 }
 ```
