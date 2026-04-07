@@ -1,166 +1,77 @@
-# PCP-JEPA Research
+# PCP-JEPA Research: Physics-Informed World Models for Continuous Control
 
-Physics-Informed World Models for Continuous Control
+## 1. Overview and Purpose
 
-## Abstract
+This repository (**PCP-JEPA**) is an empirical investigation into the failure modes of modern world models (WMs) under contact-triggered sensor dropout in continuous control. It formulates dropout as a conditionally partially observed MDP, demonstrating that standard latent-space world models (like RSSM and TOLD) fail catastrophically when subjected to contact-triggered observation dropout.
 
-This repository presents a **negative-results paper** on latent-rollout failure under contact-triggered sensor dropout in continuous control, with a constructive solution. We demonstrate that standard latent-space world models (RSSM, TOLD) fail catastrophically when subjected to contact-triggered observation dropout, while a simple observation-space velocity predictor (**PANO**) achieves **+160.9% improvement over frozen baseline** with high statistical significance (p=7.9e-33, Cohen's d=2.07) on Hopper-v4 across 100 episodes.
+As a constructive solution, this project introduces **PANO (Physics-Anchored Neural Observer)**. PANO shifts away from deep latent imagination and instead uses a learned, observation-space velocity predictor combined with explicit Euler integration. PANO achieves a **+160.9% improvement** over a frozen baseline on Hopper-v4, highlighting that short-horizon observation-space estimation is highly effective for contact-rich robotics.
 
-## Repository Structure
+## 2. Project Structure
+
+The codebase is organized into modular components separating architectures, experimental protocols, and results:
 
 ```
-experiments/
-├── phase5/           # 1D Bouncing Ball diagnostic
-├── phase6/           # Hopper locomotion + multi-env
-└── bulletproof/      # Full validation protocol
-
-src/
-├── models/           # PCP-JEPA architecture
-├── evaluation/       # Statistical tests
-└── utils/            # Helper functions
-
-results/
-├── phase6/                          # Primary Hopper bundle (100 eps / method)
-│   ├── hopper_pano_results.json     # PANO vs baselines
-│   ├── sota_baselines_results.json  # Simplified RSSM/TOLD
-│   ├── bulletproof_results.json     # Multi-env latent JEPA rollout (seed 42)
-│   └── figure*.pdf
-└── neurips/                         # Multi-seed logs: Hopper, Walker2d, Ant (PANO + SOTA per seed)
-    ├── aggregated_summary.json      # Aggregated stats (Hopper-v4, Walker2d-v4)
-    └── *.json                       # Per-env per-seed runs (see filenames)
+.
+├── experiments/
+│   ├── phase5/           # 1D Bouncing Ball diagnostics isolating variance pathology
+│   ├── phase6/           # Main Hopper locomotion + multi-env baseline scripts
+│   └── bulletproof/      # Full validation protocols and ablations
+├── src/
+│   ├── models/           # Architectures (PANO, JEPA variants, EKF)
+│   ├── evaluation/       # Statistical significance tests
+│   └── utils/            # Data processing and training helpers
+├── results/
+│   ├── phase6/           # Primary single-seed evaluations (100 episodes) & generated figures
+│   └── neurips/          # Aggregated multi-seed logs for Hopper, Walker2d, and Ant
+├── run_experiments.py    # Main runner for the multi-seed NeurIPS suite
+└── run_all_extras.py     # Runner for auxiliary baselines (LSTM, ablation, diagnostics)
 ```
 
-## Quick Start
+## 3. Key Components and Their Responsibilities
 
+* **`PANOVelocityPredictor` (`src/models/pano.py`)**: An MLP-based velocity estimator with action history context. It predicts velocity from the last clear observation, bridging the dropout gap via explicit short-horizon integration.
+* **`StandardLatentJEPA` (`src/models/jepa.py`)**: Implements a standard residual latent dynamics baseline (`z_next = z + Δz`) utilizing EMA target encoders, serving as a representative proxy for latent-rollout world models.
+* **`EventConsistentJEPA` (`src/models/event_jepa.py`)**: An experimental JEPA extension augmented with contact supervision, predicting impulse magnitudes and applying contact-conditioned constraint projections to regularize the latent space.
+* **`EKFEstimator` (`src/models/ekf.py`)**: A highly-tunable Extended Kalman Filter for baseline observation-space tracking. It includes routines for auto-calibrating process and measurement noise via trajectory grid-search.
+
+## 4. Technical Patterns and Approaches Used
+
+* **Observation vs. Latent Space**: The project contrasts full latent hallucination with simple, explicit numerical integration (Euler step) in the observation space.
+* **Auto-Calibrating Classical Baselines**: The EKF estimator pulls feature scales and heuristic noise levels dynamically from trajectory data before executing an explicit search for Q/R matrices.
+* **Conditionally Partially Observed MDPs**: Evaluating agents under rigorous, physics-informed observation disruption (i.e., masking states specifically during high-impact threshold events).
+* **Rigorous Statistical Testing**: Evaluation relies heavily on statistical significance (p-values, 95% Confidence Intervals, Cohen's d), emphasizing uncertainty overlap and variance rather than just mean point estimates.
+
+## 5. How to Run the Code
+
+### Prerequisites
+Requires Python 3.10+ and standard scientific computing/RL libraries.
 ```bash
-pip install -r requirements.txt
-python run_experiments.py
-```
-
----
-
-## Key Results
-
-### Main Result: PANO vs Baselines (100 Episodes)
-
-Using pretrained SAC experts from RL Baselines3 Zoo (HuggingFace):
-
-| Method | Reward (Mean ± Std) | 95% CI | vs Frozen | p-value | Cohen's d |
-|:-------|:-------------------|:-------|:----------|:--------|:----------|
-| **PANO** | **1201.1 ± 399.2** | [1126, 1282] | **+160.9%** | **7.9e-33** | **2.07** |
-| Oracle (no dropout) | 1116.5 ± 69.9 | [1106, 1132] | +142.5% | — | — |
-| Frozen Baseline | 460.5 ± 310.5 | [401, 522] | baseline | — | — |
-| Simplified TOLD | 110.7 ± 61.1 | [99, 122] | -76.0% | 2.2e-19 | -1.56 |
-| EKF Baseline | 93.3 ± 45.1 | [85, 102] | -79.7% | 1.2e-20 | -1.65 |
-| Simplified RSSM | 46.3 ± 31.0 | [41, 53] | -90.0% | 7.3e-24 | -1.88 |
-
-### Key Finding 1: PANO vs Oracle (overlapping uncertainty)
-
-PANO has a **higher mean** return than the oracle (+7.6% on this run), but the **95% confidence intervals overlap** (PANO [1126, 1282] vs Oracle [1106, 1132]), so this should be read as **suggestive**, not as a claim that PANO strictly dominates full observability. A plausible explanation—if the gap is real—is that velocity prediction during dropout acts like mild smoothing at contact; this remains hypothesis-level without tighter intervals or more seeds.
-
-### Key Finding 2: Standard World Models Fail Catastrophically
-
-Both latent-space world models perform **worse than doing nothing** (frozen baseline):
-- **RSSM**: -90% vs frozen (latent divergence during contact)
-- **TOLD**: -76% vs frozen (prediction compounding errors)
-
-This demonstrates that latent-space prediction is fundamentally ill-suited for contact-rich partial observability.
-
-### Key Finding 3: EKF Fails Despite Tuning
-
-The Extended Kalman Filter, even with calibrated Q/R matrices via grid search, achieves only 93.3 reward (-80% vs frozen). Linear filtering cannot handle contact discontinuities.
-
----
-
-### 1D Diagnostic: The Pathology of Variance
-
-**Phase 5 (Bouncing Ball)** isolates the failure mode in a minimal 1D environment:
-
-- **F3-JEPA** maintains 100% success across all dropout durations
-- **Frozen Detector** drops to 80% success at first dropout step
-
-This proves the pathology is localized to impact boundaries, not accumulated over trajectory.
-
----
-
-### Multi-Environment Ablation: Latent JEPA rollout (bulletproof, seed 42)
-
-**Standard latent JEPA rollout** via `StandardLatentJEPA` in `experiments/phase6/bulletproof_negative.py` (not PANO; not the simplified RSSM/TOLD scripts used in the main Hopper table). Source: `results/phase6/bulletproof_results.json`.
-
-| Environment | Contact Type | Oracle | Latent JEPA rollout | Frozen | p (latent vs frozen) | Outcome |
-|:------------|:-------------|:-------|:--------------------|:-------|:---------------------|:--------|
-| Hopper-v4 | Harsh hybrid impacts | 1109.3 | 241.2 | 361.2 | **0.0065** | **Fails** (significantly below frozen) |
-| Walker2d-v4 | Bipedal impacts | 3782.8 | 222.2 | 175.8 | 0.369 | **Inconclusive** (not significant vs frozen; both far below oracle) |
-| HalfCheetah-v4 | Smooth rolling contacts | 9408.7 | **586.5** | 207.2 | **p < 0.0001** | **Improves over frozen** |
-
-**Interpretation:** Latent JEPA rollout is strongly harmful on Hopper, **does not show a reliable gain over frozen on Walker2d** under this test (high variance, p≈0.37), and helps on HalfCheetah. For **PANO** on Walker2d (multi-seed), see `results/neurips/aggregated_summary.json`—mean reward is much higher than latent JEPA here, but PANO is still far below oracle and **not significantly above frozen** on return (p≈0.46 across seeds in that aggregate).
-
----
-
-### Negative Result: Exponential Latent Drift
-
-Prediction error grows exponentially regardless of physics phase:
-
-| Step | Overall Error | Growth Factor |
-|:-----|:--------------|:--------------|
-| 1 | 151.1 | — |
-| 2 | 243.7 | 1.6× |
-| 3 | 371.4 | 1.5× |
-| 4 | 577.6 | 1.6× |
-| 5 | 831.8 | 1.4× |
-
----
-
-## Key Contributions
-
-1. **Negative Result:** Standard latent-space world models (RSSM, TOLD) fail catastrophically under contact-triggered dropout, performing worse than a frozen baseline.
-
-2. **Constructive Solution:** PANO achieves +160.9% improvement over frozen baseline (p=7.9e-33, d=2.07), demonstrating that observation-space estimation is the correct abstraction level for contact-rich robotics.
-
-3. **Oracle comparison (cautious):** PANO’s mean return is above oracle on the main Hopper table, but **CIs overlap**; treat as exploratory rather than “beats oracle.”
-
-4. **EKF Inadequacy:** Classical filtering approaches fail (-80%) because contact dynamics violate constant-velocity assumptions.
-
-5. **Bimodal Failure:** Frozen baseline shows high variance (σ=310.5), indicating contact-triggered dropout creates catastrophic or recovery outcomes depending on timing.
-
----
-
-## Reproducibility
-
-```bash
-# Install dependencies
 pip install -r requirements.txt
 pip install rl_zoo3 huggingface_sb3
+```
 
-# Run full experiment suite (100 episodes each)
+### Running Experiments
+To reproduce the primary 100-episode evaluations on Hopper-v4:
+```bash
 python experiments/phase6/hopper_pano.py --n-episodes 100
 python experiments/phase6/sota_baselines.py --n-episodes 100
 ```
 
-All experiments complete in ~15 minutes with pretrained HuggingFace models.
-
----
-
-## Files
-
-| File | Description |
-|:-----|:------------|
-| `run_experiments.py` | Main entry point with checkpoint/resume |
-| `experiments/phase5/f3_jepa.py` | 1D Bouncing Ball diagnostic |
-| `experiments/phase6/hopper_pano.py` | PANO vs baselines (100 episodes) |
-| `experiments/phase6/sota_baselines.py` | RSSM/TOLD stress tests |
-| `results/phase6/hopper_pano_results.json` | Full PANO results with raw rewards |
-| `results/phase6/sota_baselines_results.json` | RSSM/TOLD results |
-
----
-
-## Citation
-
-```bibtex
-@misc{pcp_jepa_2026,
-  title={Latent Rollout Under Contact-Triggered Dropout: A Negative Result and a Simple Solution},
-  author={Santos, Bruno},
-  year={2026},
-  note={Preprint; submitted to NeurIPS 2026}
-}
+To run the full multi-seed suite across environments (Hopper, Walker2d, Ant):
+```bash
+python run_experiments.py
+python run_all_extras.py
 ```
+
+To generate figures from the results:
+```bash
+python experiments/phase6/neurips_figures.py --results-dir ./results/phase6
+python experiments/phase6/generate_main_figure.py
+```
+
+## 6. Important Notes About the Implementation
+
+* **Latent Drift:** The central negative result shows that standard latent prediction errors compound exponentially across contact boundaries (-90% performance vs frozen baselines).
+* **Overlapping Confidence Intervals:** While PANO's mean return often exceeds the full-observability oracle under dropout, the 95% confidence intervals overlap. This implies the superiority over the oracle is suggestive (possibly acting as a smoothing filter at contact) but not statistically guaranteed.
+* **Environment Sensitivity:** Latent rollout is harmful on Hopper-v4 but helps on HalfCheetah-v4. PANO's performance varies on Walker2d-v4, highlighting that velocity prediction with multiple contacts is sensitive to capacity and data scale.
+* **Bimodal Failures:** The frozen baseline exhibits extremely high variance due to bimodal outcomes: recovery if dropout occurs during stable phases, and catastrophic collapse during contact phases.
